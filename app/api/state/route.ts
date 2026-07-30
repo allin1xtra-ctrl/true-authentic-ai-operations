@@ -66,8 +66,12 @@ export async function POST(request: Request) {
         .bind(taskId, String(body.title || "Untitled task"), String(body.description || ""), String(body.agentId || "monroe"), String(body.priority || "medium"), "open", body.dueDate || null, body.integration || null, body.approvalRequired ? 1 : 0, now, now).run();
       return Response.json({ success: true, id: taskId }, { status: 201 });
     }
-    if (body.resource === "approval" && typeof body.id === "string" && ["approved", "rejected"].includes(String(body.status))) {
-      await db.prepare("UPDATE approvals SET status=?, updated_at=? WHERE id=?").bind(body.status, now, body.id).run();
+    if (body.resource === "approval" && typeof body.id === "string" && ["pending", "approved", "rejected"].includes(String(body.status))) {
+      if (typeof body.exactChange === "string" && body.exactChange.trim()) {
+        await db.prepare("UPDATE approvals SET status=?, exact_change=?, updated_at=? WHERE id=?").bind(body.status, body.exactChange.trim(), now, body.id).run();
+      } else {
+        await db.prepare("UPDATE approvals SET status=?, updated_at=? WHERE id=?").bind(body.status, now, body.id).run();
+      }
       return Response.json({ success: true });
     }
     return Response.json({ success: false, error: "Unsupported state operation" }, { status: 400 });
