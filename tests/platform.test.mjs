@@ -16,6 +16,8 @@ test("agent API enforces approval and a consistent contract", async () => {
   assert.match(source, /approvalRequired/);
   assert.match(source, /proposedActions/);
   assert.match(source, /Nothing has been executed/);
+  assert.match(source, /mode === "propose_action"/);
+  assert.doesNotMatch(source, /const consequential/);
   assert.doesNotMatch(source, /NEXT_PUBLIC_.*KEY/);
 });
 

@@ -13,7 +13,7 @@ const roles: Record<string, string> = {
   avery: "Product and Drop Manager focused on first-drop planning, specifications, samples, and production milestones",
 };
 
-const consequential = /(send|publish|post|schedule|contact|change|update|edit|fulfill|cancel|refund|discount|price|inventory|delete|theme|customer|supplier)/i;
+const requestModes = new Set(["analysis", "propose_action"]);
 
 function responseContract(agentId: string, conversationId: string, message: string, extra: Record<string, unknown> = {}) {
   return { success: true, conversationId, agentId, message, status: "ready", proposedActions: [], approvalRequired: false, error: null, ...extra };
@@ -98,9 +98,11 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as any;
   const agentId = String(body.agentId || "").toLowerCase();
   const message = String(body.message || "").trim();
+  const mode = String(body.mode || "analysis");
   const conversationId = String(body.conversationId || crypto.randomUUID()).slice(0, 160);
   if (!roles[agentId]) return Response.json(errorContract(agentId, conversationId, "Unknown employee.", "Invalid employee", "error"), { status: 400 });
   if (!message) return Response.json(errorContract(agentId, conversationId, "Enter a request.", "Message is required", "error"), { status: 400 });
+  if (!requestModes.has(mode)) return Response.json(errorContract(agentId, conversationId, "Choose analysis or prepare-for-approval mode.", "Invalid request mode", "error"), { status: 400 });
   if (message.length > 12_000) return Response.json(errorContract(agentId, conversationId, "The request is too long.", "Request too long", "error"), { status: 413 });
 
   try {
@@ -109,7 +111,7 @@ export async function POST(request: Request) {
     await persistMessage(agentId, conversationId, "user", message);
     await logActivity(agentId, "request_received", "Employee workspace received a request.");
 
-    if (consequential.test(message)) {
+    if (mode === "propose_action") {
       const approvalId = id("approval");
       const exactChange = `Requested instruction: ${message}`;
       const now = new Date().toISOString();
@@ -122,8 +124,15 @@ export async function POST(request: Request) {
       return Response.json(responseContract(agentId, conversationId, reply, { status: "awaiting_approval", proposedActions: [{ id: approvalId, type: "proposed_external_action", summary: exactChange, payload: { message } }], approvalRequired: true }));
     }
 
-    const system = `You are ${agentId}, ${roles[agentId]}, for True Authentic Apparel. Brand: luxury verified streetwear. Motto: The Truth Is Always Authentic. Be factual. Never claim an integration is connected unless verified server context proves it. Analyze and draft freely, but never send, publish, schedule, contact, or modify an external system. Every external action requires Brandon's explicit approval.`;
-    const reply = await generate(system, message);
+    const [memoryRows, historyRows] = await Promise.all([
+      db.prepare("SELECT category, content FROM memories WHERE approved=1 ORDER BY updated_at DESC LIMIT 30").all(),
+      db.prepare("SELECT role, message FROM conversations WHERE conversation_id=? AND agent_id=? ORDER BY created_at DESC LIMIT 12").bind(conversationId, agentId).all(),
+    ]);
+    const memory = memoryRows.results.map((row: any) => `${row.category}: ${row.content}`).join("\n");
+    const history = historyRows.results.reverse().slice(0, -1).map((row: any) => `${row.role}: ${row.message}`).join("\n");
+    const system = `You are ${agentId}, ${roles[agentId]}, for True Authentic Apparel. Be factual and concise. Use only the approved brand memory below as company truth. Never claim an integration is connected unless verified server context proves it. This request is analysis/drafting only: never send, publish, schedule, contact, or modify an external system. If the user asks for execution, explain that they must switch to Prepare for approval mode.\n\nAPPROVED BRAND MEMORY\n${memory}`;
+    const prompt = history ? `Recent workspace conversation:\n${history}\n\nCurrent request:\n${message}` : message;
+    const reply = await generate(system, prompt);
     await persistMessage(agentId, conversationId, "assistant", reply);
     await logActivity(agentId, "request_completed", "Employee returned a server-generated response.");
     return Response.json(responseContract(agentId, conversationId, reply));
