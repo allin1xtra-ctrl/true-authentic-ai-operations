@@ -41,6 +41,10 @@ export async function ensureSchema(db = getStore()) {
     db.prepare(`CREATE TABLE IF NOT EXISTS activity (
       id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, event TEXT NOT NULL,
       detail TEXT NOT NULL, created_at TEXT NOT NULL)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS integration_connections (
+      id TEXT PRIMARY KEY, provider TEXT NOT NULL UNIQUE, account_label TEXT NOT NULL,
+      encrypted_token TEXT NOT NULL, scopes TEXT NOT NULL, status TEXT NOT NULL,
+      connected_at TEXT NOT NULL, last_checked TEXT)`),
   ]);
 
   // Existing Sites databases may predate durable workspace history. D1 has no

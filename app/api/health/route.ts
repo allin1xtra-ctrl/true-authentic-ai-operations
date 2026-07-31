@@ -1,5 +1,6 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { ensureSchema, getStore } from "../../../db/store";
+import { decryptToken, getShopifyConnection } from "../integrations/shopify/shared";
 
 type Status = "ready" | "working" | "awaiting_approval" | "connection_required" | "error";
 
@@ -23,6 +24,21 @@ async function verifyAI(): Promise<{ status: Status; provider: string; checkedAt
   }
 }
 
+async function verifyShopify(): Promise<{ status: Status; checkedAt: string | null }> {
+  const checkedAt = new Date().toISOString();
+  try {
+    const connection = await getShopifyConnection();
+    if (!connection) return { status: "connection_required", checkedAt: null };
+    const token = await decryptToken(connection.encrypted_token);
+    const response = await fetch(`https://${connection.account_label}/admin/api/2026-07/shop.json`, { headers: { "x-shopify-access-token": token } });
+    const status: Status = response.ok ? "ready" : "error";
+    await getStore().prepare("UPDATE integration_connections SET status=?, last_checked=? WHERE provider='shopify'").bind(status, checkedAt).run();
+    return { status, checkedAt };
+  } catch (error) {
+    return { status: error instanceof Error && error.message === "SHOPIFY_CONFIGURATION_REQUIRED" ? "connection_required" : "error", checkedAt };
+  }
+}
+
 export async function GET() {
   if (!await getChatGPTUser()) return Response.json({ success: false, error: "Authentication required" }, { status: 401 });
 
@@ -40,11 +56,13 @@ export async function GET() {
     database = { status: "error", checkedAt: new Date().toISOString() };
   }
 
+  const shopify = await verifyShopify();
   const integrations = {
     openai: ai,
-    shopify: { status: "connection_required" as Status, checkedAt: null },
+    shopify,
     gmail: { status: "connection_required" as Status, checkedAt: null },
     metricool: { status: "connection_required" as Status, checkedAt: null },
+    scheduling: { status: "connection_required" as Status, checkedAt: null },
   };
   const requiredIntegration: Record<string, keyof typeof integrations | null> = { monroe: null, avery: null, sage: "metricool", cleo: "gmail", lennox: "shopify" };
   const employees = Object.fromEntries(Object.entries(requiredIntegration).map(([agentId, integration]) => {

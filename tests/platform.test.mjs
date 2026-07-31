@@ -70,3 +70,21 @@ test("private credentials stay server-only and provider failures are sanitized",
   assert.match(example, /OPENAI_API_KEY=/);
   assert.doesNotMatch(example, /sk-[A-Za-z0-9]/);
 });
+
+test("Shopify OAuth is server-mediated, encrypted, read-only, and visible in Settings", async () => {
+  const [ui, connect, callback, shared, migration] = await Promise.all([
+    readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/integrations/shopify/connect/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/integrations/shopify/callback/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/integrations/shopify/shared.ts", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0001_cool_toro.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(ui, /Connect Shopify/);
+  assert.match(connect, /admin\/oauth\/authorize/);
+  assert.match(callback, /admin\/oauth\/access_token/);
+  assert.match(shared, /AES-GCM/);
+  assert.match(shared, /read_products/);
+  assert.doesNotMatch(shared, /write_/);
+  assert.match(migration, /integration_connections/);
+  assert.doesNotMatch(`${ui}\n${connect}`, /NEXT_PUBLIC_.*(?:TOKEN|SECRET)/);
+});

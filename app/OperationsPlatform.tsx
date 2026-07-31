@@ -48,7 +48,11 @@ export default function OperationsPlatform() {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { refresh(true); }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (window.location.hash === "#settings" || params.has("shopify")) setView("settings");
+    refresh(true);
+  }, []);
 
   const pending = data.approvals.filter((a) => a.status === "pending");
   const results = useMemo(() => {
@@ -157,6 +161,24 @@ function Approvals({ approvals, onChange }: any) { async function decide(id: str
 
 function Memory({ memories }: any) { return <><div className="page-intro"><p className="eyebrow">PERSISTENT BRAND MEMORY</p><h2>Approved truths</h2><p>Timestamped records that shape every employee response.</p></div><div className="memory-grid">{memories.map((m: any) => <article key={m.id}><small>{m.category}</small><p>{m.content}</p><span>Approved · {new Date(m.updated_at).toLocaleDateString()}</span></article>)}</div></>; }
 
-function Settings({ integrations, health, notifications, setNotifications }: any) { return <><div className="page-intro"><p className="eyebrow">SYSTEM TRUTH</p><h2>Settings & connections</h2><p>Secrets are configured server-side only. Stored values are never returned to the browser.</p></div><div className="settings-grid"><article className="setting-card featured"><div><small>OPENAI</small><h3>{statusLabel(health.ai.status)}</h3><p>{health.ai.status === "ready" ? `Live server-side validation passed through ${health.ai.provider === "vercel_ai_gateway" ? "Vercel AI Gateway" : "OpenAI"}.` : "Configure AI_GATEWAY_API_KEY or OPENAI_API_KEY in the hosted server environment, then run a live check."}</p><span>Last check: {health.ai.checkedAt ? new Date(health.ai.checkedAt).toLocaleString() : "Never"}</span></div><Status kind={health.ai.status} text={statusLabel(health.ai.status)} /></article>{["shopify", "gmail", "metricool"].map((key) => { const saved = integrations.find((item: any) => item.id === key); const live = health.integrations?.[key] || { status: "connection_required", checkedAt: null }; return <article className="setting-card" key={key}><div><small>{key.toUpperCase()}</small><h3>{statusLabel(live.status)}</h3><p>{saved?.capabilities || "Server-side adapter not configured."}</p><span>Last successful check: {live.status === "ready" && live.checkedAt ? new Date(live.checkedAt).toLocaleString() : "Never"}</span></div><Status kind={live.status} text={statusLabel(live.status)} /></article>; })}<article className="setting-card"><div><small>DATABASE</small><h3>{statusLabel(health.database.status)}</h3><p>D1 stores tasks, conversations, memory, approvals, integration state, and audit activity.</p><span>Last check: {health.database.checkedAt ? new Date(health.database.checkedAt).toLocaleString() : "Never"}</span></div><Status kind={health.database.status} text={statusLabel(health.database.status)} /></article><article className="setting-card"><div><small>NOTIFICATIONS</small><h3>{notifications ? "Enabled" : "Muted"}</h3><p>In-app operational alerts only. External messages remain approval-gated.</p></div><button onClick={() => setNotifications(!notifications)}>{notifications ? "Mute" : "Enable"}</button></article></div></>; }
+function Settings({ integrations, health, notifications, setNotifications }: any) {
+  const [connectionMessage, setConnectionMessage] = useState(() => {
+    const result = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("shopify");
+    return result === "connected" ? "Shopify connected and verified." : result === "invalid" ? "Shopify rejected the authorization response. Please try again." : result === "failed" ? "Shopify authorization failed. Please try again." : "";
+  });
+  const [connecting, setConnecting] = useState(false);
+  async function connectShopify() {
+    const shop = window.prompt("Enter your Shopify store domain", "your-store.myshopify.com");
+    if (!shop?.trim()) return;
+    setConnecting(true); setConnectionMessage("");
+    try {
+      const response = await fetch("/api/integrations/shopify/connect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ shop }) });
+      const body = await response.json();
+      if (!response.ok || !body.url) throw new Error(body.error || "Could not start Shopify authorization.");
+      window.location.assign(body.url);
+    } catch (caught) { setConnectionMessage(caught instanceof Error ? caught.message : "Could not start Shopify authorization."); setConnecting(false); }
+  }
+  return <><div className="page-intro"><p className="eyebrow">SYSTEM TRUTH</p><h2>Settings & connections</h2><p>Secrets are configured server-side only. Stored values are never returned to the browser.</p>{connectionMessage && <p className="connection-message" role="status">{connectionMessage}</p>}</div><div className="settings-grid"><article className="setting-card featured"><div><small>OPENAI</small><h3>{statusLabel(health.ai.status)}</h3><p>{health.ai.status === "ready" ? `Live server-side validation passed through ${health.ai.provider === "vercel_ai_gateway" ? "Vercel AI Gateway" : "OpenAI"}.` : "Configure AI_GATEWAY_API_KEY or OPENAI_API_KEY in the hosted server environment, then run a live check."}</p><span>Last check: {health.ai.checkedAt ? new Date(health.ai.checkedAt).toLocaleString() : "Never"}</span></div><Status kind={health.ai.status} text={statusLabel(health.ai.status)} /></article>{["shopify", "gmail", "metricool", "scheduling"].map((key) => { const saved = integrations.find((item: any) => item.id === key); const live = health.integrations?.[key] || { status: "connection_required", checkedAt: null }; return <article className="setting-card" key={key}><div><small>{key === "scheduling" ? "GOOGLE CALENDAR" : key.toUpperCase()}</small><h3>{statusLabel(live.status)}</h3><p>{saved?.capabilities || "Server-side adapter not configured."}</p><span>Last successful check: {live.status === "ready" && live.checkedAt ? new Date(live.checkedAt).toLocaleString() : "Never"}</span></div><div className="setting-actions"><Status kind={live.status} text={statusLabel(live.status)} />{key === "shopify" && live.status !== "ready" && <button onClick={connectShopify} disabled={connecting}>{connecting ? "Connecting…" : "Connect Shopify"}</button>}{key !== "shopify" && <span className="sequence-note">Available after Shopify</span>}</div></article>; })}<article className="setting-card"><div><small>DATABASE</small><h3>{statusLabel(health.database.status)}</h3><p>D1 stores tasks, conversations, memory, approvals, integration state, and audit activity.</p><span>Last check: {health.database.checkedAt ? new Date(health.database.checkedAt).toLocaleString() : "Never"}</span></div><Status kind={health.database.status} text={statusLabel(health.database.status)} /></article><article className="setting-card"><div><small>NOTIFICATIONS</small><h3>{notifications ? "Enabled" : "Muted"}</h3><p>In-app operational alerts only. External messages remain approval-gated.</p></div><button onClick={() => setNotifications(!notifications)}>{notifications ? "Mute" : "Enable"}</button></article></div></>;
+}
 
 function Empty({ title, text }: { title: string; text: string }) { return <div className="empty"><span>TA</span><strong>{title}</strong><p>{text}</p></div>; }
