@@ -4,7 +4,16 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Agent = { id: string; name: string; role: string; initials: string; accent: string; capabilities: string[]; tools: string[] };
-type Data = { tasks: any[]; memories: any[]; approvals: any[]; integrations: any[]; activity: any[] };
+type Data = { tasks: any[]; memories: any[]; approvals: any[]; integrations: any[]; activity: any[]; conversations: any[] };
+type EmployeeStatus = "ready" | "working" | "awaiting_approval" | "connection_required" | "error";
+type Health = {
+  success: boolean;
+  checkedAt?: string;
+  ai: { status: EmployeeStatus; provider: string; checkedAt: string };
+  database: { status: EmployeeStatus; checkedAt: string };
+  integrations: Record<string, { status: EmployeeStatus; checkedAt: string | null }>;
+  employees: Record<string, { status: EmployeeStatus; requiredIntegration: string | null; pendingApprovals: number }>;
+};
 
 const agents: Agent[] = [
   { id: "monroe", name: "Monroe", role: "Business Manager", initials: "MO", accent: "#9f3548", capabilities: ["Daily priorities", "Business reporting", "Supplier comparison"], tools: ["Business memory", "Tasks"] },
@@ -14,7 +23,8 @@ const agents: Agent[] = [
   { id: "avery", name: "Avery", role: "Product & Drop Manager", initials: "AV", accent: "#4b5963", capabilities: ["Drop planning", "Tech packs", "Production milestones"], tools: ["Product memory", "Tasks"] },
 ];
 
-const empty: Data = { tasks: [], memories: [], approvals: [], integrations: [], activity: [] };
+const empty: Data = { tasks: [], memories: [], approvals: [], integrations: [], activity: [], conversations: [] };
+const emptyHealth: Health = { success: false, ai: { status: "connection_required", provider: "none", checkedAt: "" }, database: { status: "error", checkedAt: "" }, integrations: {}, employees: {} };
 
 export default function OperationsPlatform() {
   const [view, setView] = useState("dashboard");
@@ -24,15 +34,16 @@ export default function OperationsPlatform() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [notifications, setNotifications] = useState(true);
-  const [ai, setAi] = useState<{ configured: boolean; ai: string }>({ configured: false, ai: "connection_required" });
+  const [health, setHealth] = useState<Health>(emptyHealth);
 
   async function refresh(showLoading = false) {
     if (showLoading) setLoading(true); setError("");
     try {
       const [stateRes, healthRes] = await Promise.all([fetch("/api/state"), fetch("/api/health")]);
-      const state = await stateRes.json(); const health = await healthRes.json();
+      const state = await stateRes.json(); const nextHealth = await healthRes.json();
       if (!stateRes.ok || !state.success) throw new Error(state.error || "Persistent data unavailable");
-      setData(state); setAi(health);
+      if (!healthRes.ok || !nextHealth.success) throw new Error(nextHealth.error || "Health validation unavailable");
+      setData(state); setHealth(nextHealth);
     } catch (e) { setError(e instanceof Error ? e.message : "Backend unavailable"); }
     finally { setLoading(false); }
   }
@@ -67,13 +78,13 @@ export default function OperationsPlatform() {
       </header>
       {error && <div className="error-banner"><strong>Connection issue</strong><span>{error}</span><button onClick={() => refresh(true)}>Retry</button></div>}
       {loading ? <div className="loading-state"><span></span><p>Loading verified operations…</p></div> : <section className="content">
-        {view === "dashboard" && <Dashboard data={data} ai={ai} agents={agents} pending={pending} openAgent={(a: Agent) => { setSelected(a); setView("employee"); }} go={setView} />}
-        {view === "team" && <Team agents={agents} ai={ai} open={(a: Agent) => { setSelected(a); setView("employee"); }} />}
-        {view === "employee" && selected && <Employee agent={selected} ai={ai} data={data} onNewApproval={refresh} />}
+        {view === "dashboard" && <Dashboard data={data} health={health} agents={agents} pending={pending} openAgent={(a: Agent) => { setSelected(a); setView("employee"); }} go={setView} />}
+        {view === "team" && <Team agents={agents} health={health} pending={pending} open={(a: Agent) => { setSelected(a); setView("employee"); }} />}
+        {view === "employee" && selected && <Employee agent={selected} health={health} data={data} onNewApproval={refresh} />}
         {view === "tasks" && <Tasks data={data} onChange={refresh} />}
         {view === "approvals" && <Approvals approvals={data.approvals} onChange={refresh} />}
         {view === "memory" && <Memory memories={data.memories} />}
-        {view === "settings" && <Settings integrations={data.integrations} ai={ai} notifications={notifications} setNotifications={setNotifications} />}
+        {view === "settings" && <Settings integrations={data.integrations} health={health} notifications={notifications} setNotifications={setNotifications} />}
       </section>}
     </main>
   </div>;
@@ -81,24 +92,62 @@ export default function OperationsPlatform() {
 
 function Status({ kind, text }: { kind: string; text: string }) { return <span className={`status ${kind}`}>{text}</span>; }
 
-function Dashboard({ data, ai, agents, pending, openAgent, go }: any) {
+function statusLabel(status: EmployeeStatus) { return status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+
+function agentStatus(agent: Agent, health: Health, pending: any[] = []) {
+  const verified = health.employees?.[agent.id]?.status || "connection_required";
+  const hasRealApproval = pending.some((approval) => approval.agent_id === agent.id && approval.status === "pending");
+  const status: EmployeeStatus = hasRealApproval ? "awaiting_approval" : verified;
+  return { kind: status, text: statusLabel(status) };
+}
+
+function Dashboard({ data, health, agents, pending, openAgent, go }: any) {
   return <>
     <div className="hero"><div><p className="eyebrow">DAILY COMMAND BRIEF</p><h2>Operate with proof.<br />Move with approval.</h2><p>One verified view of commerce, customer experience, content, and first-drop work.</p><div className="hero-actions"><button onClick={() => go("team")}>View your team</button><button className="secondary" onClick={() => go("approvals")}>Review approvals</button></div></div><div className="truth-seal"><span>THE TRUTH IS</span><strong>ALWAYS</strong><span>AUTHENTIC</span></div></div>
-    <div className="stats"><article><small>OPEN TASKS</small><strong>{data.tasks.filter((t: any) => t.status !== "done").length}</strong><span>Stored records</span></article><article><small>AWAITING APPROVAL</small><strong>{pending.length}</strong><span>Nothing executes automatically</span></article><article><small>CONNECTED SYSTEMS</small><strong>{data.integrations.filter((i: any) => i.status === "ready" || i.status === "connected").length}</strong><span>Verified checks only</span></article><article><small>AI ENGINE</small><strong>{ai.configured ? "READY" : "—"}</strong><span>{ai.configured ? "Server-side" : "Connection required"}</span></article></div>
+    <div className="stats"><article><small>OPEN TASKS</small><strong>{data.tasks.filter((t: any) => t.status !== "done").length}</strong><span>Stored records</span></article><article><small>AWAITING APPROVAL</small><strong>{pending.length}</strong><span>Nothing executes automatically</span></article><article><small>CONNECTED SYSTEMS</small><strong>{Object.values(health.integrations || {}).filter((i: any) => i.status === "ready").length}</strong><span>Live checks only</span></article><article><small>AI ENGINE</small><strong>{health.ai.status === "ready" ? "READY" : "—"}</strong><span>{statusLabel(health.ai.status)}</span></article></div>
     <div className="section-heading"><div><p className="eyebrow">YOUR TEAM</p><h2>AI employees</h2></div><button className="text-btn" onClick={() => go("team")}>View all →</button></div>
-    <div className="agent-grid compact">{agents.map((a: Agent) => <AgentCard key={a.id} agent={a} ai={ai} open={() => openAgent(a)} />)}</div>
+    <div className="agent-grid compact">{agents.map((a: Agent) => <AgentCard key={a.id} agent={a} health={health} pending={pending} open={() => openAgent(a)} />)}</div>
     <div className="two-col"><article className="panel"><div className="panel-head"><h3>Priority queue</h3><button onClick={() => go("tasks")}>Open tasks</button></div>{data.tasks.length ? data.tasks.slice(0, 4).map((t: any) => <div className="row" key={t.id}><span className={`priority ${t.priority}`}></span><div><strong>{t.title}</strong><small>{t.agent_id} · {t.status}</small></div></div>) : <Empty title="No tasks yet" text="Create the first operational task to populate this queue." />}</article><article className="panel"><div className="panel-head"><h3>Integration truth</h3><button onClick={() => go("settings")}>Settings</button></div>{data.integrations.slice(0, 5).map((i: any) => <div className="integration-row" key={i.id}><div><strong>{i.name}</strong><small>{i.explanation}</small></div><Status kind={i.status} text={i.status.replaceAll("_", " ")} /></div>)}</article></div>
   </>;
 }
 
-function AgentCard({ agent, ai, open }: { agent: Agent; ai: any; open: () => void }) { const ready = ai.configured; return <article className="agent-card" style={{ "--agent": agent.accent } as any}><div className="avatar">{agent.initials}</div><div className="agent-copy"><h3>{agent.name}</h3><p>{agent.role}</p><Status kind={ready ? "ready" : "connection_required"} text={ready ? "Ready" : "Connection required"} /></div><button onClick={open} aria-label={`Open ${agent.name}`}>Open employee</button></article>; }
+function AgentCard({ agent, health, pending, open }: { agent: Agent; health: Health; pending: any[]; open: () => void }) { const status = agentStatus(agent, health, pending); return <article className="agent-card" style={{ "--agent": agent.accent } as any}><div className="avatar">{agent.initials}</div><div className="agent-copy"><h3>{agent.name}</h3><p>{agent.role}</p><Status kind={status.kind} text={status.text} /></div><button onClick={open} aria-label={`Open ${agent.name}`}>Open employee</button></article>; }
 
-function Team({ agents, ai, open }: any) { return <><div className="page-intro"><p className="eyebrow">FIVE SPECIALISTS · ONE OPERATING SYSTEM</p><h2>Your AI team</h2><p>Status is based on verified backend and integration state—never decorative labels.</p></div><div className="agent-grid">{agents.map((a: Agent) => <AgentCard key={a.id} agent={a} ai={ai} open={() => open(a)} />)}</div></>; }
+function Team({ agents, health, pending, open }: any) { return <><div className="page-intro"><p className="eyebrow">FIVE SPECIALISTS · ONE OPERATING SYSTEM</p><h2>Your AI team</h2><p>Status is based on verified backend and integration state—never decorative labels.</p></div><div className="agent-grid">{agents.map((a: Agent) => <AgentCard key={a.id} agent={a} health={health} pending={pending} open={() => open(a)} />)}</div></>; }
 
-function Employee({ agent, ai, data, onNewApproval }: any) {
-  const [message, setMessage] = useState(""); const [sending, setSending] = useState(false); const [messages, setMessages] = useState<any[]>([]); const [error, setError] = useState("");
-  async function send(e: FormEvent) { e.preventDefault(); if (!message.trim() || sending) return; const prompt = message; setMessage(""); setMessages((m) => [...m, { role: "user", text: prompt }]); setSending(true); setError(""); try { const res = await fetch("/api/agent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId: agent.id, message: prompt, conversationId: `${agent.id}-workspace`, context: { brand: "True Authentic Apparel", approvalMode: true } }) }); const body = await res.json(); if (!res.ok && !body.message) throw new Error(body.error || "Request failed"); setMessages((m) => [...m, { role: "assistant", text: body.message, status: body.status }]); if (body.approvalRequired) onNewApproval(); } catch (e) { setError(e instanceof Error ? e.message : "Backend unavailable"); } finally { setSending(false); } }
-  return <div className="workspace"><aside className="employee-info"><div className="big-avatar" style={{ background: agent.accent }}>{agent.initials}</div><h2>{agent.name}</h2><p>{agent.role}</p><Status kind={ai.configured ? "ready" : "connection_required"} text={ai.configured ? "Ready — AI connected" : "Connection required — AI engine missing"} /><h4>Capabilities</h4><ul>{agent.capabilities.map((c: string) => <li key={c}>{c}</li>)}</ul><h4>Connected tools</h4><ul>{agent.tools.map((t: string) => <li key={t}>{t}</li>)}</ul><h4>Assigned tasks</h4><p className="muted">{data.tasks.filter((t: any) => t.agent_id === agent.id).length} stored tasks</p></aside><div className="conversation"><div className="conversation-head"><div><p className="eyebrow">EMPLOYEE WORKSPACE</p><h2>Talk to {agent.name}</h2></div><span>Approval-first</span></div><div className="messages">{messages.length === 0 && <Empty title={`Start with ${agent.name}`} text="Ask for a read-only analysis or prepare an action for approval." />}{messages.map((m, i) => <div key={i} className={`message ${m.role}`}><small>{m.role === "user" ? "BRANDON" : agent.name.toUpperCase()}</small><p>{m.text}</p>{m.status === "awaiting_approval" && <Status kind="awaiting_approval" text="Awaiting approval" />}</div>)}{sending && <div className="typing"><span></span><span></span><span></span></div>}</div>{error && <p className="form-error">{error}</p>}<form className="composer" onSubmit={send}><textarea aria-label={`Message ${agent.name}`} placeholder={ai.configured ? `Ask ${agent.name} about operations…` : "AI connection required. Approval proposals still work."} value={message} onChange={(e) => setMessage(e.target.value)} /><button disabled={!message.trim() || sending}>{sending ? "Working…" : "Send"}</button></form></div></div>;
+function Employee({ agent, health, data, onNewApproval }: any) {
+  const history = useMemo(() => data.conversations.filter((item: any) => item.agent_id === agent.id).map((item: any) => ({ role: item.role, text: item.message, status: item.status })), [agent.id, data.conversations]);
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [messages, setMessages] = useState<any[]>(history);
+  const [error, setError] = useState("");
+  useEffect(() => { setMessages(history); }, [history]);
+  const pending = data.approvals.filter((approval: any) => approval.agent_id === agent.id && approval.status === "pending");
+  const verified = agentStatus(agent, health, pending);
+
+  async function send(e: FormEvent) {
+    e.preventDefault();
+    if (!message.trim() || sending) return;
+    const prompt = message.trim();
+    setMessage("");
+    setMessages((current) => [...current, { role: "user", text: prompt }]);
+    setSending(true);
+    setError("");
+    try {
+      const response = await fetch("/api/agent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId: agent.id, message: prompt, conversationId: `${agent.id}-workspace` }) });
+      const body = await response.json();
+      if (!body.message?.trim()) throw new Error("The employee returned no visible response.");
+      setMessages((current) => [...current, { role: "assistant", text: body.message, status: body.status }]);
+      if (!response.ok) setError(body.message);
+      if (body.approvalRequired) await onNewApproval();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Backend unavailable");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return <div className="workspace"><aside className="employee-info"><div className="big-avatar" style={{ background: agent.accent }}>{agent.initials}</div><h2>{agent.name}</h2><p>{agent.role}</p><Status kind={sending ? "working" : verified.kind} text={sending ? "Working" : verified.text} /><h4>Capabilities</h4><ul>{agent.capabilities.map((capability: string) => <li key={capability}>{capability}</li>)}</ul><h4>Connected tools</h4><ul>{agent.tools.map((tool: string) => <li key={tool}>{tool}</li>)}</ul><h4>Assigned tasks</h4><p className="muted">{data.tasks.filter((task: any) => task.agent_id === agent.id).length} stored tasks</p><h4>Approval controls</h4><p className="muted">{pending.length ? `${pending.length} real review item${pending.length === 1 ? "" : "s"} waiting` : "No approvals waiting"}</p></aside><div className="conversation"><div className="conversation-head"><div><p className="eyebrow">EMPLOYEE WORKSPACE</p><h2>Talk to {agent.name}</h2></div><span>Approval-first</span></div><div className="messages">{messages.length === 0 && <Empty title={`Start with ${agent.name}`} text="Ask for a read-only analysis or prepare an action for approval." />}{messages.map((item, index) => <div key={index} className={`message ${item.role}`}><small>{item.role === "user" ? "BRANDON" : agent.name.toUpperCase()}</small><p>{item.text}</p>{item.status === "awaiting_approval" && <Status kind="awaiting_approval" text="Awaiting approval" />}</div>)}{sending && <div className="typing"><span></span><span></span><span></span></div>}</div>{error && <p className="form-error">{error}</p>}<form className="composer" onSubmit={send}><textarea aria-label={`Message ${agent.name}`} placeholder={verified.kind === "ready" ? `Ask ${agent.name} about operations…` : "Connection required. Approval proposals still work."} value={message} onChange={(event) => setMessage(event.target.value)} /><button disabled={!message.trim() || sending}>{sending ? "Working…" : "Send"}</button></form></div></div>;
 }
 
 function Tasks({ data, onChange }: any) { const [open, setOpen] = useState(false); const [form, setForm] = useState({ title: "", description: "", agentId: "monroe", priority: "medium" }); async function save(e: FormEvent) { e.preventDefault(); await fetch("/api/state", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ resource: "task", ...form }) }); setOpen(false); setForm({ title: "", description: "", agentId: "monroe", priority: "medium" }); onChange(); } return <><div className="page-intro action"><div><p className="eyebrow">PERSISTENT OPERATIONS</p><h2>Tasks</h2><p>Totals are calculated from stored task records.</p></div><button onClick={() => setOpen(!open)}>New task</button></div>{open && <form className="task-form" onSubmit={save}><input required placeholder="Task title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /><textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /><select value={form.agentId} onChange={(e) => setForm({ ...form, agentId: e.target.value })}>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select><select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}><option>low</option><option>medium</option><option>high</option></select><button>Save task</button></form>}<div className="record-list">{data.tasks.length ? data.tasks.map((t: any) => <article key={t.id}><span className={`priority ${t.priority}`}></span><div><h3>{t.title}</h3><p>{t.description || "No description"}</p><small>{t.agent_id} · {t.integration || "internal"} · updated {new Date(t.updated_at).toLocaleString()}</small></div><Status kind="ready" text={t.status} /></article>) : <Empty title="No stored tasks" text="Create a task and it will persist across refreshes and sessions." />}</div></>; }
@@ -107,6 +156,6 @@ function Approvals({ approvals, onChange }: any) { async function decide(id: str
 
 function Memory({ memories }: any) { return <><div className="page-intro"><p className="eyebrow">PERSISTENT BRAND MEMORY</p><h2>Approved truths</h2><p>Timestamped records that shape every employee response.</p></div><div className="memory-grid">{memories.map((m: any) => <article key={m.id}><small>{m.category}</small><p>{m.content}</p><span>Approved · {new Date(m.updated_at).toLocaleDateString()}</span></article>)}</div></>; }
 
-function Settings({ integrations, ai, notifications, setNotifications }: any) { return <><div className="page-intro"><p className="eyebrow">SYSTEM TRUTH</p><h2>Settings & integrations</h2><p>Secrets are configured server-side only. No browser field stores credentials.</p></div><div className="settings-grid"><article className="setting-card featured"><div><small>AI ENGINE</small><h3>{ai.configured ? "Connected" : "AI connection required"}</h3><p>{ai.configured ? `Active authentication: ${ai.ai === "vercel_ai_gateway" ? "Vercel AI Gateway" : "server-side OpenAI API"}.` : "Add AI_GATEWAY_API_KEY or OPENAI_API_KEY to the hosted server environment."}</p></div><Status kind={ai.configured ? "ready" : "connection_required"} text={ai.configured ? "Ready" : "Connection required"} /></article>{integrations.filter((i: any) => i.id !== "ai").map((i: any) => <article className="setting-card" key={i.id}><div><small>{i.name.toUpperCase()}</small><h3>{i.explanation}</h3><p>{i.capabilities}</p><span>Last successful check: {i.last_checked ? new Date(i.last_checked).toLocaleString() : "Never"}</span></div><Status kind={i.status} text={i.status.replaceAll("_", " ")} /></article>)}<article className="setting-card"><div><small>NOTIFICATIONS</small><h3>{notifications ? "Enabled" : "Muted"}</h3><p>In-app operational alerts. External messages remain approval-gated.</p></div><button onClick={() => setNotifications(!notifications)}>{notifications ? "Mute" : "Enable"}</button></article></div></>; }
+function Settings({ integrations, health, notifications, setNotifications }: any) { return <><div className="page-intro"><p className="eyebrow">SYSTEM TRUTH</p><h2>Settings & connections</h2><p>Secrets are configured server-side only. Stored values are never returned to the browser.</p></div><div className="settings-grid"><article className="setting-card featured"><div><small>OPENAI</small><h3>{statusLabel(health.ai.status)}</h3><p>{health.ai.status === "ready" ? `Live server-side validation passed through ${health.ai.provider === "vercel_ai_gateway" ? "Vercel AI Gateway" : "OpenAI"}.` : "Configure AI_GATEWAY_API_KEY or OPENAI_API_KEY in the hosted server environment, then run a live check."}</p><span>Last check: {health.ai.checkedAt ? new Date(health.ai.checkedAt).toLocaleString() : "Never"}</span></div><Status kind={health.ai.status} text={statusLabel(health.ai.status)} /></article>{["shopify", "gmail", "metricool"].map((key) => { const saved = integrations.find((item: any) => item.id === key); const live = health.integrations?.[key] || { status: "connection_required", checkedAt: null }; return <article className="setting-card" key={key}><div><small>{key.toUpperCase()}</small><h3>{statusLabel(live.status)}</h3><p>{saved?.capabilities || "Server-side adapter not configured."}</p><span>Last successful check: {live.status === "ready" && live.checkedAt ? new Date(live.checkedAt).toLocaleString() : "Never"}</span></div><Status kind={live.status} text={statusLabel(live.status)} /></article>; })}<article className="setting-card"><div><small>DATABASE</small><h3>{statusLabel(health.database.status)}</h3><p>D1 stores tasks, conversations, memory, approvals, integration state, and audit activity.</p><span>Last check: {health.database.checkedAt ? new Date(health.database.checkedAt).toLocaleString() : "Never"}</span></div><Status kind={health.database.status} text={statusLabel(health.database.status)} /></article><article className="setting-card"><div><small>NOTIFICATIONS</small><h3>{notifications ? "Enabled" : "Muted"}</h3><p>In-app operational alerts only. External messages remain approval-gated.</p></div><button onClick={() => setNotifications(!notifications)}>{notifications ? "Mute" : "Enable"}</button></article></div></>; }
 
 function Empty({ title, text }: { title: string; text: string }) { return <div className="empty"><span>TA</span><strong>{title}</strong><p>{text}</p></div>; }

@@ -23,9 +23,11 @@ CREATE TABLE `approvals` (
 --> statement-breakpoint
 CREATE TABLE `conversations` (
 	`id` text PRIMARY KEY NOT NULL,
+	`conversation_id` text,
 	`agent_id` text NOT NULL,
 	`role` text NOT NULL,
 	`message` text NOT NULL,
+	`status` text DEFAULT 'ready' NOT NULL,
 	`created_at` text NOT NULL
 );
 --> statement-breakpoint

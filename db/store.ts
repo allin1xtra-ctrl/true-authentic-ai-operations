@@ -32,8 +32,9 @@ export async function ensureSchema(db = getStore()) {
       target_platform TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL,
       execution_result TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS conversations (
-      id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, role TEXT NOT NULL,
-      message TEXT NOT NULL, created_at TEXT NOT NULL)`),
+      id TEXT PRIMARY KEY, conversation_id TEXT, agent_id TEXT NOT NULL,
+      role TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready',
+      created_at TEXT NOT NULL)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS integrations (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL,
       explanation TEXT NOT NULL, capabilities TEXT NOT NULL, last_checked TEXT)`),
@@ -41,6 +42,19 @@ export async function ensureSchema(db = getStore()) {
       id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, event TEXT NOT NULL,
       detail TEXT NOT NULL, created_at TEXT NOT NULL)`),
   ]);
+
+  // Existing Sites databases may predate durable workspace history. D1 has no
+  // `ADD COLUMN IF NOT EXISTS`, so only ignore the duplicate-column condition.
+  for (const statement of [
+    "ALTER TABLE conversations ADD COLUMN conversation_id TEXT",
+    "ALTER TABLE conversations ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'",
+  ]) {
+    try {
+      await db.prepare(statement).run();
+    } catch (error) {
+      if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+    }
+  }
 }
 
 export function id(prefix: string) {
