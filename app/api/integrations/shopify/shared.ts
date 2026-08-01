@@ -1,8 +1,7 @@
 import { getStore } from "../../../../db/store";
 
 export const SHOPIFY_SCOPES = [
-  "read_products", "read_inventory", "read_customers", "read_orders",
-  "read_fulfillments", "read_reports",
+  "read_products", "read_inventory", "read_orders", "read_fulfillments",
 ].join(",");
 
 export const SHOPIFY_API_VERSION = "2026-07";
@@ -74,8 +73,8 @@ export async function validateShopifyReadAccess(shop: string, token: string) {
     headers: { "content-type": "application/json", "x-shopify-access-token": token },
     body: JSON.stringify({ query: `query ValidateShopifyReadAccess {
       shop { id name myshopifyDomain }
-      products(first: 1) { nodes { id title } }
-      orders(first: 1, sortKey: CREATED_AT, reverse: true) { nodes { id name createdAt } }
+      products(first: 1) { nodes { id title variants(first: 1) { nodes { inventoryItem { id tracked inventoryLevels(first: 1) { nodes { id } } } } } } }
+      orders(first: 1, sortKey: CREATED_AT, reverse: true) { nodes { id name createdAt fulfillments(first: 1) { id status } } }
     }` }),
   });
   const body = await response.json().catch(() => null) as { data?: { shop?: { id?: string; myshopifyDomain?: string }; products?: unknown; orders?: unknown }; errors?: unknown } | null;

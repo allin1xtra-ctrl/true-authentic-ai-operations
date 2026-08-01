@@ -87,6 +87,10 @@ test("Shopify OAuth is server-mediated, state-backed, encrypted, read-only, and 
   assert.match(shared, /AES-GCM/);
   assert.match(shared, /graphql\.json/);
   assert.match(shared, /read_products/);
+  assert.match(shared, /read_inventory/);
+  assert.match(shared, /read_orders/);
+  assert.match(shared, /read_fulfillments/);
+  assert.doesNotMatch(shared, /read_customers|read_reports|read_all_orders/);
   assert.doesNotMatch(shared, /write_/);
   assert.match(migration, /oauth_states/);
   for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "SHOPIFY_APP_URL"]) assert.match(example, new RegExp(`${key}=`));
