@@ -3,7 +3,7 @@ import { ensureSchema, getStore } from "../../../db/store";
 
 const SHOPIFY_BACKEND = "https://true-authentic-ai-team-backend.vercel.app";
 const SITES_ORIGIN = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site";
-const SHOPIFY_STORE = "2f1f04-9f.myshopify.com";
+const SHOPIFY_STORE = "true-authentic-apparel.myshopify.com";
 
 type Status = "ready" | "working" | "awaiting_approval" | "connection_required" | "error";
 

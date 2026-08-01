@@ -168,7 +168,7 @@ function Settings({ integrations, health, notifications, setNotifications }: any
   });
   const [connecting, setConnecting] = useState(false);
   async function connectShopify() {
-    const shop = window.prompt("Enter your Shopify store domain", "your-store.myshopify.com");
+    const shop = window.prompt("Enter your Shopify store domain", "true-authentic-apparel.myshopify.com");
     if (!shop?.trim()) return;
     setConnecting(true); setConnectionMessage("");
     try {
