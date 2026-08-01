@@ -4,6 +4,8 @@ import { ensureSchema, getStore, id } from "../../../../db/store";
 
 const contexts = new Set(["conversation", "task", "memory"]);
 const api = "https://api.openai.com/v1";
+const maxRequestBytes = 16_384;
+const maxPromptLength = 2_000;
 
 function decodeBase64(value: string) {
   const binary = atob(value); const bytes = new Uint8Array(binary.length);
@@ -26,7 +28,10 @@ export async function POST(request: Request) {
   if (!await getChatGPTUser()) return Response.json({ success: false, error: "Authentication required" }, { status: 401 });
   if (!process.env.OPENAI_API_KEY) return Response.json({ success: false, error: "OpenAI media generation is not configured" }, { status: 503 });
   if (!env.MEDIA) return Response.json({ success: false, error: "Media storage is not connected" }, { status: 503 });
-  const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > maxRequestBytes) return Response.json({ success: false, error: "This request is too large. Shorten the prompt and try again." }, { status: 413 });
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) return Response.json({ success: false, error: "The media request was not valid JSON" }, { status: 400 });
   const action = String(body.action || "create"); const db = getStore(); await ensureSchema(db);
   if (action === "refresh") {
     const generationId = String(body.id || "");
@@ -48,9 +53,10 @@ export async function POST(request: Request) {
     return Response.json({ success: true, status: safeStatus, progress: provider.progress || 0 });
   }
 
-  const contextType = String(body.contextType || ""); const contextId = String(body.contextId || "").trim().slice(0, 180); const kind = String(body.kind || "image"); const prompt = String(body.prompt || "").trim().slice(0, 4000);
+  const contextType = String(body.contextType || ""); const contextId = String(body.contextId || "").trim().slice(0, 180); const kind = String(body.kind || "image"); const prompt = String(body.prompt || "").trim().replace(/\s+/g, " ");
   if (!contexts.has(contextType) || !contextId) return Response.json({ success: false, error: "Invalid attachment destination" }, { status: 400 });
   if (!prompt) return Response.json({ success: false, error: "Describe the media to create" }, { status: 400 });
+  if (prompt.length > maxPromptLength) return Response.json({ success: false, error: `Keep the prompt under ${maxPromptLength.toLocaleString()} characters.` }, { status: 413 });
   if (!new Set(["image", "video"]).has(kind)) return Response.json({ success: false, error: "Choose image or video" }, { status: 400 });
   const generationId = id("generation"); const now = new Date().toISOString();
   if (kind === "image") {

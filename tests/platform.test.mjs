@@ -101,6 +101,10 @@ test("generated media stays server-side and approval controls remain isolated", 
   assert.match(media, /cache-control": "private, no-store/);
   assert.match(hosting, /"r2": "MEDIA"/);
   assert.match(ui, /Create with AI/);
+  assert.match(ui, /readApiResponse/);
+  assert.match(ui, /response\.status === 413/);
+  assert.match(generation, /maxRequestBytes/);
+  assert.match(generation, /maxPromptLength/);
   assert.doesNotMatch(`${generation}\n${ui}`, /NEXT_PUBLIC_.*OPENAI/);
   assert.doesNotMatch(generation, /api\/shopify/);
 });
