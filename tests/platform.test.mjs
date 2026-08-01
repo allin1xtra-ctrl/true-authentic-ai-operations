@@ -71,29 +71,18 @@ test("private credentials stay server-only and provider failures are sanitized",
   assert.doesNotMatch(example, /sk-[A-Za-z0-9]/);
 });
 
-test("Shopify OAuth is server-mediated, state-backed, encrypted, read-only, and visible in Settings", async () => {
-  const [ui, connect, callback, shared, migration, example] = await Promise.all([
+test("Shopify OAuth is delegated to the protected Vercel backend", async () => {
+  const [ui, connect, health, example] = await Promise.all([
     readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/integrations/shopify/connect/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/integrations/shopify/callback/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/integrations/shopify/shared.ts", import.meta.url), "utf8"),
-    readFile(new URL("../drizzle/0002_yummy_captain_cross.sql", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
   ]);
   assert.match(ui, /Connect Shopify/);
-  assert.match(connect, /admin\/oauth\/authorize/);
-  assert.match(callback, /admin\/oauth\/access_token/);
-  assert.match(callback, /validateShopifyReadAccess/);
-  assert.match(shared, /AES-GCM/);
-  assert.match(shared, /graphql\.json/);
-  assert.match(shared, /read_products/);
-  assert.match(shared, /read_inventory/);
-  assert.match(shared, /read_orders/);
-  assert.match(shared, /read_fulfillments/);
-  assert.doesNotMatch(shared, /read_customers|read_reports|read_all_orders/);
-  assert.doesNotMatch(shared, /write_/);
-  assert.match(migration, /oauth_states/);
-  for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "SHOPIFY_APP_URL"]) assert.match(example, new RegExp(`${key}=`));
-  assert.doesNotMatch(`${connect}\n${callback}\n${shared}`, /SHOPIFY_CLIENT_(?:ID|SECRET)/);
+  assert.match(connect, /api\/shopify\/oauth\/start/);
+  assert.match(health, /api\/shopify\/status/);
+  assert.match(example, /SHOPIFY_BACKEND_URL=/);
+  for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "INTEGRATION_ENCRYPTION_KEY"]) assert.doesNotMatch(example, new RegExp(`${key}=`));
+  assert.doesNotMatch(`${connect}\n${health}`, /SHOPIFY_API_(?:KEY|SECRET)/);
   assert.doesNotMatch(`${ui}\n${connect}`, /NEXT_PUBLIC_.*(?:TOKEN|SECRET)/);
 });

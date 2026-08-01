@@ -164,7 +164,7 @@ function Memory({ memories }: any) { return <><div className="page-intro"><p cla
 function Settings({ integrations, health, notifications, setNotifications }: any) {
   const [connectionMessage, setConnectionMessage] = useState(() => {
     const result = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("shopify");
-    return result === "connected" ? "Shopify connected and verified with live read-only checks." : result === "invalid" ? "Shopify rejected or expired the authorization request. Please try again." : result === "failed" ? "Shopify authorization failed. Please try again." : result === "validation_failed" ? "Shopify authorized the app, but the required read-only checks failed. Confirm the app scopes and reinstall." : "";
+    return result === "connected" ? "Shopify connected and verified with live read-only checks." : result === "invalid" ? "Shopify rejected or expired the authorization request. Please try again." : result === "failed" ? "Shopify authorization failed. Please try again." : result === "permissions" ? "Shopify returned unapproved permissions. Review the active app version before reinstalling." : result === "storage_unavailable" ? "Shopify secure storage is unavailable on the backend." : result === "validation_failed" ? "Shopify authorized the app, but the required read-only checks failed. Confirm the app scopes and reinstall." : "";
   });
   const [connecting, setConnecting] = useState(false);
   async function connectShopify() {

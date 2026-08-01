@@ -1,6 +1,9 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { ensureSchema, getStore } from "../../../db/store";
-import { decryptToken, getShopifyConnection, shopifyConfig, validateShopifyReadAccess } from "../integrations/shopify/shared";
+
+const SHOPIFY_BACKEND = "https://true-authentic-ai-team-backend.vercel.app";
+const SITES_ORIGIN = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site";
+const SHOPIFY_STORE = "2f1f04-9f.myshopify.com";
 
 type Status = "ready" | "working" | "awaiting_approval" | "connection_required" | "error";
 
@@ -25,20 +28,16 @@ async function verifyAI(): Promise<{ status: Status; provider: string; checkedAt
 }
 
 async function verifyShopify(): Promise<{ status: Status; checkedAt: string | null; configured: boolean; message?: string }> {
-  const checkedAt = new Date().toISOString();
-  const configured = shopifyConfig().configured;
-  if (!configured) return { status: "connection_required", checkedAt: null, configured, message: "Shopify connection settings are incomplete on this dashboard server." };
+  const backend = process.env.SHOPIFY_BACKEND_URL?.trim().replace(/\/$/, "");
+  if (backend !== SHOPIFY_BACKEND) return { status: "connection_required", checkedAt: null, configured: false, message: "Shopify connection proxy is unavailable." };
   try {
-    const connection = await getShopifyConnection();
-    if (!connection) return { status: "connection_required", checkedAt: null, configured };
-    const token = await decryptToken(connection.encrypted_token);
-    await validateShopifyReadAccess(connection.account_label, token);
-    const status: Status = "ready";
-    await getStore().prepare("UPDATE integration_connections SET status=?, last_checked=? WHERE provider='shopify'").bind(status, checkedAt).run();
-    return { status, checkedAt, configured };
+    const url = new URL("/api/shopify/status", backend); url.searchParams.set("shop", SHOPIFY_STORE);
+    const response = await fetch(url, { headers: { origin: SITES_ORIGIN }, cache: "no-store" });
+    const body = await response.json().catch(() => null) as { status?: Status; checkedAt?: string | null; configured?: boolean; message?: string } | null;
+    if (!body?.status) throw new Error("INVALID_SHOPIFY_STATUS");
+    return { status: body.status, checkedAt: body.checkedAt || null, configured: Boolean(body.configured), message: body.message };
   } catch {
-    await getStore().prepare("UPDATE integration_connections SET status='error', last_checked=? WHERE provider='shopify'").bind(checkedAt).run().catch(() => undefined);
-    return { status: "error", checkedAt, configured, message: "Shopify authorization exists, but the live read-only validation failed." };
+    return { status: "error", checkedAt: null, configured: true, message: "Shopify backend validation is temporarily unavailable." };
   }
 }
 
