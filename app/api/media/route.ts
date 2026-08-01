@@ -18,7 +18,9 @@ export async function POST(request: Request) {
     const file = form.get("file");
     const contextType = String(form.get("contextType") || "");
     const contextId = String(form.get("contextId") || "").trim().slice(0, 180);
-    const source = form.get("source") === "generated" ? "generated" : "uploaded";
+    // Browser uploads cannot self-identify as AI-generated. A future trusted
+    // server-side generation adapter may write that source value directly.
+    const source = "uploaded";
     if (!(file instanceof File)) return Response.json({ success: false, error: "Choose an image or video" }, { status: 400 });
     if (!allowedContexts.has(contextType) || !contextId) return Response.json({ success: false, error: "Invalid attachment destination" }, { status: 400 });
     if (!allowedTypes.has(file.type)) return Response.json({ success: false, error: "Use JPG, PNG, WebP, GIF, MP4, WebM, or MOV" }, { status: 415 });
