@@ -47,7 +47,7 @@ export async function GET() {
   try {
     await seed();
     const db = getStore();
-    const [tasks, memory, approvals, integrationRows, activity, conversations, attachments] = await Promise.all([
+    const [tasks, memory, approvals, integrationRows, activity, conversations, attachments, generations] = await Promise.all([
       db.prepare("SELECT * FROM tasks ORDER BY updated_at DESC LIMIT 100").all(),
       db.prepare("SELECT * FROM memories ORDER BY created_at ASC").all(),
       db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all(),
@@ -55,8 +55,9 @@ export async function GET() {
       db.prepare("SELECT * FROM activity ORDER BY created_at DESC LIMIT 50").all(),
       db.prepare("SELECT * FROM conversations ORDER BY created_at ASC LIMIT 500").all(),
       db.prepare("SELECT id,context_type,context_id,file_name,mime_type,size_bytes,source,created_at FROM media_attachments ORDER BY created_at DESC LIMIT 500").all(),
+      db.prepare("SELECT id,context_type,context_id,kind,prompt,status,progress,attachment_id,created_at,updated_at FROM media_generations ORDER BY created_at DESC LIMIT 200").all(),
     ]);
-    return Response.json({ success: true, tasks: tasks.results, memories: memory.results, approvals: approvals.results, integrations: integrationRows.results, activity: activity.results, conversations: conversations.results, attachments: attachments.results });
+    return Response.json({ success: true, tasks: tasks.results, memories: memory.results, approvals: approvals.results, integrations: integrationRows.results, activity: activity.results, conversations: conversations.results, attachments: attachments.results, generations: generations.results });
   } catch (error) {
     return Response.json({ success: false, error: error instanceof Error ? error.message : "State unavailable" }, { status: 503 });
   }

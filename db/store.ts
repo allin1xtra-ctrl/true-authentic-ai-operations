@@ -53,6 +53,11 @@ export async function ensureSchema(db = getStore()) {
       object_key TEXT NOT NULL UNIQUE, file_name TEXT NOT NULL, mime_type TEXT NOT NULL,
       size_bytes INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'uploaded', created_at TEXT NOT NULL)`),
     db.prepare("CREATE INDEX IF NOT EXISTS media_context_idx ON media_attachments(context_type, context_id, created_at)"),
+    db.prepare(`CREATE TABLE IF NOT EXISTS media_generations (
+      id TEXT PRIMARY KEY, context_type TEXT NOT NULL, context_id TEXT NOT NULL,
+      kind TEXT NOT NULL, prompt TEXT NOT NULL, provider_id TEXT, status TEXT NOT NULL,
+      progress INTEGER NOT NULL DEFAULT 0, attachment_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
+    db.prepare("CREATE INDEX IF NOT EXISTS generation_context_idx ON media_generations(context_type, context_id, created_at)"),
   ]);
 
   // Existing Sites databases may predate durable workspace history. D1 has no

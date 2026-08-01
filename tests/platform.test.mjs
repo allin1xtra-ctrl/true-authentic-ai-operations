@@ -86,3 +86,21 @@ test("Shopify OAuth is delegated to the protected Vercel backend", async () => {
   assert.doesNotMatch(`${connect}\n${health}`, /SHOPIFY_API_(?:KEY|SECRET)/);
   assert.doesNotMatch(`${ui}\n${connect}`, /NEXT_PUBLIC_.*(?:TOKEN|SECRET)/);
 });
+
+test("generated media stays server-side and approval controls remain isolated", async () => {
+  const [generation, media, hosting, ui] = await Promise.all([
+    readFile(new URL("../app/api/media/generate/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/media/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
+    readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(generation, /getChatGPTUser/);
+  assert.match(generation, /gpt-image-2/);
+  assert.match(generation, /sora-2/);
+  assert.match(generation, /private\/generated/);
+  assert.match(media, /cache-control": "private, no-store/);
+  assert.match(hosting, /"r2": "MEDIA"/);
+  assert.match(ui, /Create with AI/);
+  assert.doesNotMatch(`${generation}\n${ui}`, /NEXT_PUBLIC_.*OPENAI/);
+  assert.doesNotMatch(generation, /api\/shopify/);
+});
