@@ -45,6 +45,9 @@ export async function ensureSchema(db = getStore()) {
       id TEXT PRIMARY KEY, provider TEXT NOT NULL UNIQUE, account_label TEXT NOT NULL,
       encrypted_token TEXT NOT NULL, scopes TEXT NOT NULL, status TEXT NOT NULL,
       connected_at TEXT NOT NULL, last_checked TEXT)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS oauth_states (
+      id TEXT PRIMARY KEY, provider TEXT NOT NULL, state_hash TEXT NOT NULL UNIQUE,
+      account_label TEXT NOT NULL, expires_at TEXT NOT NULL, used_at TEXT)`),
   ]);
 
   // Existing Sites databases may predate durable workspace history. D1 has no

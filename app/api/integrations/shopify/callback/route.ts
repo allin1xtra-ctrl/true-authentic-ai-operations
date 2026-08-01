@@ -1,10 +1,6 @@
 import { getChatGPTUser } from "../../../../chatgpt-auth";
 import { ensureSchema, getStore } from "../../../../../db/store";
-import { encryptToken, normalizeShop } from "../shared";
-
-function cookie(request: Request, name: string) {
-  return request.headers.get("cookie")?.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${name}=`))?.slice(name.length + 1) || "";
-}
+import { encryptToken, normalizeShop, shopifyConfig, validateShopifyReadAccess } from "../shared";
 
 async function validHmac(url: URL, secret: string) {
   const supplied = url.searchParams.get("hmac") || "";
@@ -22,15 +18,24 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const shop = normalizeShop(url.searchParams.get("shop") || "");
   const code = url.searchParams.get("code");
-  const secret = process.env.SHOPIFY_CLIENT_SECRET;
-  if (!shop || !code || !secret || url.searchParams.get("state") !== cookie(request, "shopify_oauth_state") || !await validHmac(url, secret)) {
+  const state = url.searchParams.get("state") || "";
+  const config = shopifyConfig();
+  if (!shop || !code || !state || !config.configured || !config.apiSecret || !config.apiKey || !config.appUrl || !await validHmac(url, config.apiSecret)) {
     return Response.redirect(`${url.origin}/?shopify=invalid#settings`, 303);
   }
-  const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ client_id: process.env.SHOPIFY_CLIENT_ID, client_secret: secret, code }) });
+  const db = getStore(); await ensureSchema(db);
+  const stateHash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(state)))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const savedState = await db.prepare("SELECT id FROM oauth_states WHERE provider='shopify' AND state_hash=? AND account_label=? AND used_at IS NULL AND expires_at>=? LIMIT 1")
+    .bind(stateHash, shop, new Date().toISOString()).first() as { id: string } | null;
+  if (!savedState) return Response.redirect(`${config.appUrl}/?shopify=invalid#settings`, 303);
+  await db.prepare("UPDATE oauth_states SET used_at=? WHERE id=? AND used_at IS NULL").bind(new Date().toISOString(), savedState.id).run();
+  const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ client_id: config.apiKey, client_secret: config.apiSecret, code }) });
   const tokenBody = await tokenResponse.json().catch(() => ({})) as { access_token?: string; scope?: string };
-  if (!tokenResponse.ok || !tokenBody.access_token) return Response.redirect(`${url.origin}/?shopify=failed#settings`, 303);
-  const db = getStore(); await ensureSchema(db); const now = new Date().toISOString();
+  if (!tokenResponse.ok || !tokenBody.access_token) return Response.redirect(`${config.appUrl}/?shopify=failed#settings`, 303);
+  try { await validateShopifyReadAccess(shop, tokenBody.access_token); }
+  catch { return Response.redirect(`${config.appUrl}/?shopify=validation_failed#settings`, 303); }
+  const now = new Date().toISOString();
   await db.prepare("INSERT INTO integration_connections (id,provider,account_label,encrypted_token,scopes,status,connected_at,last_checked) VALUES ('shopify','shopify',?,?,?,?,?,?) ON CONFLICT(provider) DO UPDATE SET account_label=excluded.account_label,encrypted_token=excluded.encrypted_token,scopes=excluded.scopes,status='ready',connected_at=excluded.connected_at,last_checked=excluded.last_checked")
     .bind(shop, await encryptToken(tokenBody.access_token), tokenBody.scope || "", "ready", now, now).run();
-  return new Response(null, { status: 303, headers: { location: `${url.origin}/?shopify=connected#settings`, "set-cookie": "shopify_oauth_state=; Path=/api/integrations/shopify; HttpOnly; Secure; SameSite=Lax; Max-Age=0" } });
+  return Response.redirect(`${config.appUrl}/?shopify=connected#settings`, 303);
 }

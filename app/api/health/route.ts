@@ -1,6 +1,6 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { ensureSchema, getStore } from "../../../db/store";
-import { decryptToken, getShopifyConnection } from "../integrations/shopify/shared";
+import { decryptToken, getShopifyConnection, shopifyConfig, validateShopifyReadAccess } from "../integrations/shopify/shared";
 
 type Status = "ready" | "working" | "awaiting_approval" | "connection_required" | "error";
 
@@ -24,18 +24,21 @@ async function verifyAI(): Promise<{ status: Status; provider: string; checkedAt
   }
 }
 
-async function verifyShopify(): Promise<{ status: Status; checkedAt: string | null }> {
+async function verifyShopify(): Promise<{ status: Status; checkedAt: string | null; configured: boolean; message?: string }> {
   const checkedAt = new Date().toISOString();
+  const configured = shopifyConfig().configured;
+  if (!configured) return { status: "connection_required", checkedAt: null, configured, message: "Shopify connection settings are incomplete on this dashboard server." };
   try {
     const connection = await getShopifyConnection();
-    if (!connection) return { status: "connection_required", checkedAt: null };
+    if (!connection) return { status: "connection_required", checkedAt: null, configured };
     const token = await decryptToken(connection.encrypted_token);
-    const response = await fetch(`https://${connection.account_label}/admin/api/2026-07/shop.json`, { headers: { "x-shopify-access-token": token } });
-    const status: Status = response.ok ? "ready" : "error";
+    await validateShopifyReadAccess(connection.account_label, token);
+    const status: Status = "ready";
     await getStore().prepare("UPDATE integration_connections SET status=?, last_checked=? WHERE provider='shopify'").bind(status, checkedAt).run();
-    return { status, checkedAt };
-  } catch (error) {
-    return { status: error instanceof Error && error.message === "SHOPIFY_CONFIGURATION_REQUIRED" ? "connection_required" : "error", checkedAt };
+    return { status, checkedAt, configured };
+  } catch {
+    await getStore().prepare("UPDATE integration_connections SET status='error', last_checked=? WHERE provider='shopify'").bind(checkedAt).run().catch(() => undefined);
+    return { status: "error", checkedAt, configured, message: "Shopify authorization exists, but the live read-only validation failed." };
   }
 }
 
