@@ -1,6 +1,11 @@
 declare module "cloudflare:workers" {
   export const env: {
     DB?: import("./db/store").D1Like;
+    MEDIA?: {
+      put(key: string, value: ReadableStream | ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+      get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>;
+      delete(key: string): Promise<void>;
+    };
   };
 }
 

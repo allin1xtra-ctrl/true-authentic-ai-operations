@@ -48,6 +48,11 @@ export async function ensureSchema(db = getStore()) {
     db.prepare(`CREATE TABLE IF NOT EXISTS oauth_states (
       id TEXT PRIMARY KEY, provider TEXT NOT NULL, state_hash TEXT NOT NULL UNIQUE,
       account_label TEXT NOT NULL, expires_at TEXT NOT NULL, used_at TEXT)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS media_attachments (
+      id TEXT PRIMARY KEY, context_type TEXT NOT NULL, context_id TEXT NOT NULL,
+      object_key TEXT NOT NULL UNIQUE, file_name TEXT NOT NULL, mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'uploaded', created_at TEXT NOT NULL)`),
+    db.prepare("CREATE INDEX IF NOT EXISTS media_context_idx ON media_attachments(context_type, context_id, created_at)"),
   ]);
 
   // Existing Sites databases may predate durable workspace history. D1 has no
