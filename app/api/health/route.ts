@@ -1,5 +1,6 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { ensureSchema, getStore } from "../../../db/store";
+import { verifyMetaConnection } from "../../../lib/meta";
 
 const SHOPIFY_BACKEND = "https://true-authentic-ai-team-backend.vercel.app";
 const SITES_ORIGIN = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site";
@@ -58,15 +59,15 @@ export async function GET() {
     database = { status: "error", checkedAt: new Date().toISOString() };
   }
 
-  const shopify = await verifyShopify();
+  const [shopify, meta] = await Promise.all([verifyShopify(), verifyMetaConnection()]);
   const integrations = {
     openai: ai,
     shopify,
     gmail: { status: "connection_required" as Status, checkedAt: null },
-    metricool: { status: "connection_required" as Status, checkedAt: null },
+    meta,
     scheduling: { status: "connection_required" as Status, checkedAt: null },
   };
-  const requiredIntegration: Record<string, keyof typeof integrations | null> = { monroe: null, avery: null, sage: "metricool", cleo: "gmail", lennox: "shopify" };
+  const requiredIntegration: Record<string, keyof typeof integrations | null> = { monroe: null, avery: null, sage: "meta", cleo: "gmail", lennox: "shopify" };
   const employees = Object.fromEntries(Object.entries(requiredIntegration).map(([agentId, integration]) => {
     let status: Status = ai.status;
     if (status === "ready" && integration && integrations[integration].status !== "ready") status = integrations[integration].status;

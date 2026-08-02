@@ -17,7 +17,7 @@ type Health = {
 
 const agents: Agent[] = [
   { id: "monroe", name: "Monroe", role: "Business Manager", initials: "MO", accent: "#9f3548", capabilities: ["Daily priorities", "Business reporting", "Supplier comparison"], tools: ["Business memory", "Tasks"] },
-  { id: "sage", name: "Sage", role: "Social Media Manager", initials: "SA", accent: "#74604c", capabilities: ["Content calendar", "Campaign planning", "Social analytics"], tools: ["Metricool (connection required)", "Approvals"] },
+  { id: "sage", name: "Sage", role: "Social Media Manager", initials: "SA", accent: "#74604c", capabilities: ["Content calendar", "Campaign planning", "Social analytics"], tools: ["Direct social channels", "Approvals"] },
   { id: "cleo", name: "Cleo", role: "Customer Experience", initials: "CL", accent: "#8a5369", capabilities: ["Inbox review", "Support drafts", "Order communication"], tools: ["Gmail (connection required)", "Approvals"] },
   { id: "lennox", name: "Lennox", role: "Commerce Manager", initials: "LE", accent: "#6f2434", capabilities: ["Shopify orders", "Product monitoring", "Conversion analysis"], tools: ["Shopify (connection required)", "Approvals"] },
   { id: "avery", name: "Avery", role: "Product & Drop Manager", initials: "AV", accent: "#4b5963", capabilities: ["Drop planning", "Tech packs", "Production milestones"], tools: ["Product memory", "Tasks"] },
@@ -186,10 +186,13 @@ function MediaPanel({ contextType, contextId, attachments, generations = [], onC
 function Settings({ integrations, health, notifications, setNotifications }: any) {
   const [connectionMessage, setConnectionMessage] = useState(() => {
     const result = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("shopify");
+    const metaResult = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("meta");
+    if (metaResult) return metaResult === "connected" ? "Meta connected and verified with live read-only checks." : metaResult === "no_page" ? "Meta authorized the app, but no managed Facebook Page was available." : metaResult === "denied" ? "Meta authorization was cancelled." : metaResult === "configuration" ? "Meta connection credentials are incomplete on the server." : "Meta authorization could not be verified. Please try again.";
     return result === "connected" ? "Shopify connected and verified with live read-only checks." : result === "invalid" ? "Shopify rejected or expired the authorization request. Please try again." : result === "failed" ? "Shopify authorization failed. Please try again." : result === "permissions" ? "Shopify returned unapproved permissions. Review the active app version before reinstalling." : result === "storage_unavailable" ? "Shopify secure storage is unavailable on the backend." : result === "validation_failed" ? "Shopify authorized the app, but the required read-only checks failed. Confirm the app scopes and reinstall." : "";
   });
   const [connecting, setConnecting] = useState(false);
   const [setup, setSetup] = useState<"gmail" | "social" | "calendar" | null>(null);
+  const [connectingMeta, setConnectingMeta] = useState(false);
   const setupDetails = {
     gmail: { title: "Connect Gmail", text: "Create a Google OAuth web application for read-only inbox access and draft creation. Sending remains approval-gated.", href: "https://console.cloud.google.com/apis/credentials", label: "Open Google Cloud" },
     social: { title: "Connect social channels", text: "Connect Instagram, Facebook, TikTok, YouTube, Pinterest, or X directly. Each channel requires its own developer app and review before publishing can be enabled.", href: "https://developers.facebook.com/apps/", label: "Start with Meta" },
@@ -198,7 +201,7 @@ function Settings({ integrations, health, notifications, setNotifications }: any
   const cards = [
     { key: "shopify", label: "SHOPIFY", action: "Connect Shopify" },
     { key: "gmail", label: "GMAIL", action: "Set up Gmail" },
-    { key: "metricool", label: "SOCIAL CHANNELS", action: "Choose channels" },
+    { key: "meta", label: "META · INSTAGRAM + FACEBOOK", action: "Connect Meta" },
     { key: "scheduling", label: "GOOGLE CALENDAR", action: "Set up Calendar" },
   ];
   async function connectShopify() {
@@ -212,13 +215,22 @@ function Settings({ integrations, health, notifications, setNotifications }: any
       window.location.assign(body.url);
     } catch (caught) { setConnectionMessage(caught instanceof Error ? caught.message : "Could not start Shopify authorization."); setConnecting(false); }
   }
-  function openSetup(key: string) { setConnectionMessage(""); setSetup(key === "metricool" ? "social" : key === "scheduling" ? "calendar" : "gmail"); }
+  async function connectMeta() {
+    setConnectingMeta(true); setConnectionMessage("");
+    try {
+      const response = await fetch("/api/integrations/meta/start", { method: "POST" });
+      const body = await readApiResponse(response, "Could not start Meta authorization.");
+      if (typeof body.url !== "string") throw new Error("Meta authorization returned no destination.");
+      window.location.assign(body.url);
+    } catch (caught) { setConnectionMessage(caught instanceof Error ? caught.message : "Could not start Meta authorization."); setConnectingMeta(false); }
+  }
+  function openSetup(key: string) { setConnectionMessage(""); setSetup(key === "meta" ? "social" : key === "scheduling" ? "calendar" : "gmail"); }
   return <>
     <div className="page-intro"><p className="eyebrow">SYSTEM TRUTH</p><h2>Settings & connections</h2><p>Secrets are configured server-side only. Stored values are never returned to the browser.</p>{connectionMessage && <p className="connection-message" role="status">{connectionMessage}</p>}</div>
     {setup && <section className="setup-panel" aria-labelledby="setup-title"><div><p className="eyebrow">SECURE CONNECTION SETUP</p><h3 id="setup-title">{setupDetails[setup].title}</h3><p>{setupDetails[setup].text}</p><p className="setup-truth">Connection status will remain Required until OAuth and a live validation succeed.</p></div><div><a href={setupDetails[setup].href} target="_blank" rel="noreferrer">{setupDetails[setup].label}</a><button type="button" className="secondary" onClick={() => setSetup(null)}>Close</button></div></section>}
     <div className="settings-grid">
       <article className="setting-card featured"><div><small>OPENAI</small><h3>{statusLabel(health.ai.status)}</h3><p>{health.ai.status === "ready" ? `Live server-side validation passed through ${health.ai.provider === "vercel_ai_gateway" ? "Vercel AI Gateway" : "OpenAI"}.` : "Configure AI_GATEWAY_API_KEY or OPENAI_API_KEY in the hosted server environment, then run a live check."}</p><span>Last check: {health.ai.checkedAt ? new Date(health.ai.checkedAt).toLocaleString() : "Never"}</span></div><Status kind={health.ai.status} text={statusLabel(health.ai.status)} /></article>
-      {cards.map(({ key, label, action }) => { const saved = integrations.find((item: any) => item.id === key); const live = health.integrations?.[key] || { status: "connection_required", checkedAt: null }; const capabilities = key === "metricool" ? "Instagram, Facebook, TikTok, YouTube, Pinterest, X" : saved?.capabilities || "Server-side adapter not configured."; return <article className="setting-card" key={key}><div><small>{label}</small><h3>{statusLabel(live.status)}</h3><p>{capabilities}</p><span>Last successful check: {live.status === "ready" && live.checkedAt ? new Date(live.checkedAt).toLocaleString() : "Never"}</span></div><div className="setting-actions"><Status kind={live.status} text={statusLabel(live.status)} />{live.status !== "ready" && (key === "shopify" ? <button onClick={connectShopify} disabled={connecting}>{connecting ? "Connecting…" : action}</button> : <button type="button" onClick={() => openSetup(key)}>{action}</button>)}</div></article>; })}
+      {cards.map(({ key, label, action }) => { const saved = integrations.find((item: any) => item.id === key); const live = health.integrations?.[key] || { status: "connection_required", checkedAt: null, configured: false }; const capabilities = key === "meta" ? "Facebook Page and Instagram professional account · read-only validation" : saved?.capabilities || "Server-side adapter not configured."; return <article className="setting-card" key={key}><div><small>{label}</small><h3>{statusLabel(live.status)}</h3><p>{capabilities}</p><span>Last successful check: {live.status === "ready" && live.checkedAt ? new Date(live.checkedAt).toLocaleString() : "Never"}</span></div><div className="setting-actions"><Status kind={live.status} text={statusLabel(live.status)} />{live.status !== "ready" && (key === "shopify" ? <button onClick={connectShopify} disabled={connecting}>{connecting ? "Connecting…" : action}</button> : key === "meta" && live.configured ? <button type="button" onClick={connectMeta} disabled={connectingMeta}>{connectingMeta ? "Connecting…" : action}</button> : <button type="button" onClick={() => openSetup(key)}>{action}</button>)}</div></article>; })}
       <article className="setting-card"><div><small>DATABASE</small><h3>{statusLabel(health.database.status)}</h3><p>D1 stores tasks, conversations, memory, approvals, integration state, and audit activity.</p><span>Last check: {health.database.checkedAt ? new Date(health.database.checkedAt).toLocaleString() : "Never"}</span></div><Status kind={health.database.status} text={statusLabel(health.database.status)} /></article>
       <article className="setting-card"><div><small>NOTIFICATIONS</small><h3>{notifications ? "Enabled" : "Muted"}</h3><p>In-app operational alerts only. External messages remain approval-gated.</p></div><button onClick={() => setNotifications(!notifications)}>{notifications ? "Mute" : "Enable"}</button></article>
     </div>

@@ -16,7 +16,7 @@ const integrations = [
   ["ai", "AI Engine", "connection_required", "AI connection required", "agent responses, daily brief"],
   ["shopify", "Shopify", "connection_required", "Connection required", "orders, products, fulfillment, sales"],
   ["gmail", "Gmail", "connection_required", "Connection required", "search inbox, read threads, prepare drafts"],
-  ["metricool", "Metricool", "connection_required", "Connection required", "analytics, planner, drafts, scheduled posts"],
+  ["meta", "Meta", "connection_required", "Connection required", "Facebook Page and Instagram account discovery"],
   ["scheduling", "Scheduling", "connection_required", "Connection required", "daily command brief"],
 ];
 
@@ -39,7 +39,8 @@ async function seed() {
     ).bind(key, name, status, explanation, capabilities, now)));
   }
   // No adapter may claim a live connection until it has a successful server-side check.
-  await db.prepare("UPDATE integrations SET status='connection_required', explanation='Connection required', last_checked=NULL WHERE id IN ('ai','shopify','gmail','metricool','scheduling')").run();
+  await db.prepare("INSERT INTO integrations (id,name,status,explanation,capabilities,last_checked) VALUES ('meta','Meta','connection_required','Connection required','Facebook Page and Instagram account discovery',NULL) ON CONFLICT(id) DO NOTHING").run();
+  await db.prepare("UPDATE integrations SET status='connection_required', explanation='Connection required', last_checked=NULL WHERE id IN ('ai','shopify','gmail','scheduling')").run();
 }
 
 export async function GET() {

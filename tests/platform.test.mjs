@@ -52,7 +52,7 @@ test("employee readiness is live, integration-specific, and approval-backed", as
   ]);
   assert.match(health, /lennox: "shopify"/);
   assert.match(health, /cleo: "gmail"/);
-  assert.match(health, /sage: "metricool"/);
+  assert.match(health, /sage: "meta"/);
   assert.match(health, /status = "awaiting_approval"/);
   assert.match(ui, /pending\.some/);
   assert.doesNotMatch(ui, /const ready = ai\.configured/);
@@ -89,10 +89,32 @@ test("Shopify OAuth is delegated to the protected Vercel backend", async () => {
 
 test("every disconnected settings card exposes an honest setup action", async () => {
   const ui = await readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8");
-  for (const label of ["Set up Gmail", "Choose channels", "Set up Calendar"]) assert.match(ui, new RegExp(label));
+  for (const label of ["Set up Gmail", "Connect Meta", "Set up Calendar"]) assert.match(ui, new RegExp(label));
   assert.match(ui, /Connection status will remain Required until OAuth and a live validation succeed/);
   assert.doesNotMatch(ui, /Available after Shopify/);
-  assert.match(ui, /SOCIAL CHANNELS/);
+  assert.match(ui, /META · INSTAGRAM \+ FACEBOOK/);
+});
+
+test("Meta OAuth is state-protected, encrypted, read-only, and live-validated", async () => {
+  const [start, callback, meta, health, ui] = await Promise.all([
+    readFile(new URL("../app/api/integrations/meta/start/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/integrations/meta/callback/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/meta.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(start, /crypto\.randomUUID/);
+  assert.match(start, /stateHash/);
+  assert.match(callback, /used_at IS NULL/);
+  assert.match(callback, /encryptMetaToken/);
+  assert.match(meta, /AES-GCM/);
+  assert.match(meta, /pages_show_list/);
+  assert.match(meta, /pages_read_engagement/);
+  assert.match(meta, /instagram_basic/);
+  assert.doesNotMatch(`${start}\n${callback}\n${meta}`, /pages_manage_posts|instagram_content_publish|instagram_manage_messages|instagram_manage_comments/);
+  assert.match(health, /verifyMetaConnection/);
+  assert.match(ui, /api\/integrations\/meta\/start/);
+  assert.doesNotMatch(`${ui}\n${start}`, /NEXT_PUBLIC_.*META/);
 });
 
 test("generated media stays server-side and approval controls remain isolated", async () => {
