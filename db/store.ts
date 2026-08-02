@@ -58,6 +58,20 @@ export async function ensureSchema(db = getStore()) {
       kind TEXT NOT NULL, prompt TEXT NOT NULL, provider_id TEXT, status TEXT NOT NULL,
       progress INTEGER NOT NULL DEFAULT 0, attachment_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
     db.prepare("CREATE INDEX IF NOT EXISTS generation_context_idx ON media_generations(context_type, context_id, created_at)"),
+    db.prepare(`CREATE TABLE IF NOT EXISTS automation_schedules (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, agent_id TEXT NOT NULL, instruction TEXT NOT NULL,
+      cadence TEXT NOT NULL, daily_time TEXT, timezone TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+      last_run_at TEXT, next_run_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
+    db.prepare("CREATE INDEX IF NOT EXISTS automation_due_idx ON automation_schedules(enabled, next_run_at)"),
+    db.prepare(`CREATE TABLE IF NOT EXISTS automation_runs (
+      id TEXT PRIMARY KEY, schedule_id TEXT NOT NULL, agent_id TEXT NOT NULL, status TEXT NOT NULL,
+      attempt INTEGER NOT NULL DEFAULT 1, output TEXT, error TEXT, started_at TEXT NOT NULL,
+      completed_at TEXT, created_at TEXT NOT NULL)`),
+    db.prepare("CREATE INDEX IF NOT EXISTS automation_runs_schedule_idx ON automation_runs(schedule_id, created_at)"),
+    db.prepare(`CREATE TABLE IF NOT EXISTS inbox_items (
+      id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL,
+      summary TEXT NOT NULL, status TEXT NOT NULL, source_id TEXT, created_at TEXT NOT NULL, read_at TEXT)`),
+    db.prepare("CREATE INDEX IF NOT EXISTS inbox_status_idx ON inbox_items(status, created_at)"),
   ]);
 
   // Existing Sites databases may predate durable workspace history. D1 has no

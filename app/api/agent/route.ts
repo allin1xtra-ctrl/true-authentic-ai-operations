@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { ensureSchema, getStore, id } from "../../../db/store";
+import { AI_MODEL, generateAI } from "../../../lib/ai";
 
-const MODEL = "gpt-5.4";
-const REQUEST_TIMEOUT_MS = 45_000;
 
 const roles: Record<string, string> = {
   monroe: "Business Manager focused on priorities, reporting, analysis, and operational planning",
@@ -25,57 +24,6 @@ function errorContract(agentId: string, conversationId: string, message: string,
   return { success: false, conversationId, agentId, message, status, proposedActions: [], approvalRequired: false, error };
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function extractResponseText(data: any): string {
-  const direct = typeof data?.output_text === "string" ? data.output_text.trim() : "";
-  if (direct) return direct;
-  const nested = Array.isArray(data?.output)
-    ? data.output.flatMap((item: any) => Array.isArray(item?.content) ? item.content : [])
-      .map((part: any) => typeof part?.text === "string" ? part.text.trim() : "")
-      .filter(Boolean)
-      .join("\n")
-    : "";
-  return nested.trim();
-}
-
-async function generate(system: string, prompt: string) {
-  const gatewayCredential = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
-  if (gatewayCredential) {
-    const result = await fetchWithTimeout("https://ai-gateway.vercel.sh/v1/chat/completions", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${gatewayCredential}` },
-      body: JSON.stringify({ model: `openai/${MODEL}`, messages: [{ role: "system", content: system }, { role: "user", content: prompt }] }),
-    });
-    if (!result.ok) throw new Error("AI_PROVIDER_REJECTED");
-    const data = await result.json() as any;
-    const text = typeof data?.choices?.[0]?.message?.content === "string" ? data.choices[0].message.content.trim() : "";
-    if (!text) throw new Error("AI_EMPTY_RESPONSE");
-    return text;
-  }
-
-  if (process.env.OPENAI_API_KEY) {
-    const result = await fetchWithTimeout("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({ model: MODEL, instructions: system, input: prompt, store: false }),
-    });
-    if (!result.ok) throw new Error("AI_PROVIDER_REJECTED");
-    const text = extractResponseText(await result.json());
-    if (!text) throw new Error("AI_EMPTY_RESPONSE");
-    return text;
-  }
-
-  throw new Error("AI_CONNECTION_REQUIRED");
-}
 
 async function persistMessage(agentId: string, conversationId: string, role: string, message: string, status = "ready") {
   const db = getStore();
@@ -91,7 +39,7 @@ async function logActivity(agentId: string, event: string, detail: string) {
 
 export async function GET() {
   if (!await getChatGPTUser()) return Response.json({ success: false, error: "Authentication required" }, { status: 401 });
-  return Response.json({ success: true, service: "true-authentic-ai-operations", route: "/api/agent", model: MODEL, configured: Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.OPENAI_API_KEY) });
+  return Response.json({ success: true, service: "true-authentic-ai-operations", route: "/api/agent", model: AI_MODEL, configured: Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.OPENAI_API_KEY) });
 }
 
 export async function POST(request: Request) {
@@ -135,7 +83,7 @@ export async function POST(request: Request) {
     const history = historyRows.results.reverse().slice(0, -1).map((row: any) => `${row.role}: ${row.message}`).join("\n");
     const system = `You are ${agentId}, ${roles[agentId]}, for True Authentic Apparel. Be factual and concise. Use only the approved brand memory below as company truth. Never claim an integration is connected unless verified server context proves it. This request is analysis/drafting only: never send, publish, schedule, contact, or modify an external system. If live analytics or other source data was not provided in this request, say that it is unavailable rather than inventing results. If the user asks for execution, explain that they must switch to Prepare for approval mode.\n\nAPPROVED BRAND MEMORY\n${memory}`;
     const prompt = history ? `Recent workspace conversation:\n${history}\n\nCurrent request:\n${message}` : message;
-    const reply = await generate(system, prompt);
+    const reply = await generateAI(system, prompt);
     await persistMessage(agentId, conversationId, "assistant", reply);
     await logActivity(agentId, "request_completed", "Employee returned a server-generated response.");
     return Response.json(responseContract(agentId, conversationId, reply));

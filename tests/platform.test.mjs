@@ -167,3 +167,30 @@ test("tasks reject rapid duplicate submissions and expose lifecycle controls", a
   assert.match(ui, /Saving…/);
   for (const label of ["Start", "Mark done", "Reopen"]) assert.match(ui, new RegExp(label));
 });
+
+test("phase one automations are durable, scheduled, and read-only", async () => {
+  const [automation, worker, store, ui, hosting] = await Promise.all([
+    readFile(new URL("../lib/automations.ts", import.meta.url), "utf8"),
+    readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/store.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
+  ]);
+  for (const table of ["automation_schedules", "automation_runs", "inbox_items"]) assert.match(store, new RegExp(table));
+  assert.match(worker, /async scheduled/);
+  assert.match(worker, /AUTOMATION_CRON_SECRET/);
+  assert.match(automation, /Never send, publish, contact, purchase, modify, or execute/);
+  assert.match(automation, /No external action executed/);
+  assert.match(ui, /Operations inbox/);
+  assert.match(ui, /Run now/);
+  assert.match(hosting, /"d1": "DB"/);
+});
+
+test("automation API requires identity or the protected scheduler secret", async () => {
+  const route = await readFile(new URL("../app/api/automations/route.ts", import.meta.url), "utf8");
+  assert.match(route, /getChatGPTUser/);
+  assert.match(route, /x-automation-secret/);
+  assert.match(route, /AUTOMATION_CRON_SECRET/);
+  assert.match(route, /isSafeScheduledInstruction/);
+  assert.doesNotMatch(route, /NEXT_PUBLIC_.*SECRET/);
+});

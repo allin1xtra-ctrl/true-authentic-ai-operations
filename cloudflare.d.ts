@@ -6,6 +6,7 @@ declare module "cloudflare:workers" {
       get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>;
       delete(key: string): Promise<void>;
     };
+    AUTOMATION_CRON_SECRET?: string;
   };
 }
 

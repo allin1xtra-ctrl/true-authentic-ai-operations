@@ -5,6 +5,7 @@ import handler from "vinext/server/app-router-entry";
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  AUTOMATION_CRON_SECRET?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -41,6 +42,15 @@ const worker = {
     }
 
     return handler.fetch(request, env, ctx);
+  },
+  async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (!env.AUTOMATION_CRON_SECRET) return;
+    const request = new Request("https://true-authentic-ai-operations.internal/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-automation-secret": env.AUTOMATION_CRON_SECRET },
+      body: JSON.stringify({ action: "tick" }),
+    });
+    ctx.waitUntil(handler.fetch(request, env, ctx));
   },
 };
 
