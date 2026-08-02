@@ -87,6 +87,14 @@ test("Shopify OAuth is delegated to the protected Vercel backend", async () => {
   assert.doesNotMatch(`${ui}\n${connect}`, /NEXT_PUBLIC_.*(?:TOKEN|SECRET)/);
 });
 
+test("every disconnected settings card exposes an honest setup action", async () => {
+  const ui = await readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8");
+  for (const label of ["Set up Gmail", "Choose channels", "Set up Calendar"]) assert.match(ui, new RegExp(label));
+  assert.match(ui, /Connection status will remain Required until OAuth and a live validation succeed/);
+  assert.doesNotMatch(ui, /Available after Shopify/);
+  assert.match(ui, /SOCIAL CHANNELS/);
+});
+
 test("generated media stays server-side and approval controls remain isolated", async () => {
   const [generation, media, hosting, ui] = await Promise.all([
     readFile(new URL("../app/api/media/generate/route.ts", import.meta.url), "utf8"),
