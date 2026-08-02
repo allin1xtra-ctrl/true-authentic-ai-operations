@@ -41,6 +41,9 @@ async function seed() {
   // No adapter may claim a live connection until it has a successful server-side check.
   await db.prepare("INSERT INTO integrations (id,name,status,explanation,capabilities,last_checked) VALUES ('meta','Meta','connection_required','Connection required','Facebook Page and Instagram account discovery',NULL) ON CONFLICT(id) DO NOTHING").run();
   await db.prepare("UPDATE integrations SET status='connection_required', explanation='Connection required', last_checked=NULL WHERE id IN ('ai','shopify','gmail','scheduling')").run();
+  await db.prepare("UPDATE approvals SET execution_result='Approved. No external action executed because no verified execution adapter is attached to this proposal.' WHERE status='approved' AND execution_result IS NULL").run();
+  await db.prepare("UPDATE approvals SET execution_result='Rejected. No external action executed.' WHERE status='rejected' AND execution_result IS NULL").run();
+  await db.prepare("UPDATE conversations SET status='ready' WHERE status='awaiting_approval' AND agent_id NOT IN (SELECT agent_id FROM approvals WHERE status='pending')").run();
 }
 
 export async function GET() {
@@ -76,9 +79,13 @@ export async function POST(request: Request) {
       if (!agentIds.has(agentId)) return Response.json({ success: false, error: "Invalid employee" }, { status: 400 });
       const title = String(body.title || "").trim();
       if (!title) return Response.json({ success: false, error: "Task title is required" }, { status: 400 });
+      const description = String(body.description || "").trim().slice(0, 4000);
+      const duplicate = await db.prepare("SELECT id FROM tasks WHERE lower(title)=lower(?) AND lower(description)=lower(?) AND agent_id=? AND created_at>=? LIMIT 1")
+        .bind(title.slice(0, 240), description, agentId, new Date(Date.now() - 30_000).toISOString()).first() as { id?: string } | null;
+      if (duplicate?.id) return Response.json({ success: true, id: duplicate.id, duplicate: true });
       const taskId = id("task");
       await db.prepare("INSERT INTO tasks (id,title,description,agent_id,priority,status,due_date,integration,approval_required,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(taskId, title.slice(0, 240), String(body.description || "").slice(0, 4000), agentId, ["low", "medium", "high"].includes(String(body.priority)) ? String(body.priority) : "medium", "open", body.dueDate || null, body.integration || null, body.approvalRequired ? 1 : 0, now, now).run();
+        .bind(taskId, title.slice(0, 240), description, agentId, ["low", "medium", "high"].includes(String(body.priority)) ? String(body.priority) : "medium", "open", body.dueDate || null, body.integration || null, body.approvalRequired ? 1 : 0, now, now).run();
       await db.prepare("INSERT INTO activity (id,agent_id,event,detail,created_at) VALUES (?,?,?,?,?)").bind(id("activity"), agentId, "task_created", `Task ${taskId} created.`, now).run();
       return Response.json({ success: true, id: taskId }, { status: 201 });
     }
@@ -89,15 +96,24 @@ export async function POST(request: Request) {
       return Response.json({ success: true });
     }
     if (body.resource === "approval" && typeof body.id === "string" && ["pending", "approved", "rejected"].includes(String(body.status))) {
+      const approval = await db.prepare("SELECT agent_id,payload,status FROM approvals WHERE id=?").bind(body.id).first() as { agent_id: string; payload: string; status: string } | null;
+      if (!approval) return Response.json({ success: false, error: "Approval not found" }, { status: 404 });
+      if (approval.status !== "pending" && body.status !== "pending") return Response.json({ success: false, error: "This approval has already been decided" }, { status: 409 });
+      let conversationId = "";
+      try { conversationId = String((JSON.parse(approval.payload) as { conversationId?: string }).conversationId || ""); } catch { /* legacy approval payload */ }
+      const executionResult = body.status === "approved" ? "Approved. No external action executed because no verified execution adapter is attached to this proposal." : body.status === "rejected" ? "Rejected. No external action executed." : null;
       let result: { meta?: { changes?: number } };
       if (typeof body.exactChange === "string" && body.exactChange.trim()) {
-        result = await db.prepare("UPDATE approvals SET status=?, exact_change=?, updated_at=? WHERE id=?").bind(body.status, body.exactChange.trim().slice(0, 8000), now, body.id).run() as { meta?: { changes?: number } };
+        result = await db.prepare("UPDATE approvals SET status=?, exact_change=?, execution_result=?, updated_at=? WHERE id=?").bind(body.status, body.exactChange.trim().slice(0, 8000), executionResult, now, body.id).run() as { meta?: { changes?: number } };
       } else {
-        result = await db.prepare("UPDATE approvals SET status=?, updated_at=? WHERE id=?").bind(body.status, now, body.id).run() as { meta?: { changes?: number } };
+        result = await db.prepare("UPDATE approvals SET status=?, execution_result=?, updated_at=? WHERE id=?").bind(body.status, executionResult, now, body.id).run() as { meta?: { changes?: number } };
       }
       if (!result?.meta?.changes) return Response.json({ success: false, error: "Approval not found" }, { status: 404 });
+      await db.prepare("UPDATE conversations SET status='ready' WHERE id=(SELECT id FROM conversations WHERE agent_id=? AND status='awaiting_approval' ORDER BY created_at DESC LIMIT 1)").bind(approval.agent_id).run();
+      const resolvedConversation = conversationId || `${approval.agent_id}-workspace`;
+      if (executionResult) await db.prepare("INSERT INTO conversations (id,conversation_id,agent_id,role,message,status,created_at) VALUES (?,?,?,?,?,'ready',?)").bind(id("msg"), resolvedConversation, approval.agent_id, "assistant", executionResult, now).run();
       await db.prepare("INSERT INTO activity (id,agent_id,event,detail,created_at) SELECT ?,agent_id,'approval_decision',?,? FROM approvals WHERE id=?").bind(id("activity"), `Approval ${body.id} recorded as ${body.status}. No external action executed.`, now, body.id).run();
-      return Response.json({ success: true });
+      return Response.json({ success: true, executionResult });
     }
     return Response.json({ success: false, error: "Unsupported state operation" }, { status: 400 });
   } catch (error) {

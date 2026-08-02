@@ -14,6 +14,8 @@ const roles: Record<string, string> = {
 };
 
 const requestModes = new Set(["analysis", "propose_action"]);
+const readOnlyLead = /^(check|analy[sz]e|review|report|show|summarize|audit|inspect|read|find|list|compare)\b/i;
+const externalMutation = /\b(send|publish|post|schedule|contact|order|purchase|buy|create|update|change|edit|delete|remove|refund|fulfill|cancel|message|email)\b/i;
 
 function responseContract(agentId: string, conversationId: string, message: string, extra: Record<string, unknown> = {}) {
   return { success: true, conversationId, agentId, message, status: "ready", proposedActions: [], approvalRequired: false, error: null, ...extra };
@@ -111,13 +113,14 @@ export async function POST(request: Request) {
     await persistMessage(agentId, conversationId, "user", message);
     await logActivity(agentId, "request_received", "Employee workspace received a request.");
 
-    if (mode === "propose_action") {
+    const readOnlyRequest = readOnlyLead.test(message) && !externalMutation.test(message);
+    if (mode === "propose_action" && !readOnlyRequest) {
       const approvalId = id("approval");
       const exactChange = `Requested instruction: ${message}`;
       const now = new Date().toISOString();
-      const target = agentId === "cleo" ? "Gmail" : agentId === "sage" ? "Metricool" : agentId === "lennox" ? "Shopify" : "External service";
+      const target = agentId === "cleo" ? "Gmail" : agentId === "sage" ? "Meta" : agentId === "lennox" ? "Shopify" : "External service";
       await db.prepare("INSERT INTO approvals (id,agent_id,action_type,summary,reason,exact_change,target_platform,payload,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(approvalId, agentId, "proposed_external_action", `Review ${agentId}'s proposed action`, "Consequential external actions require Brandon's approval", exactChange, target, JSON.stringify({ message }), "pending", now, now).run();
+        .bind(approvalId, agentId, "proposed_external_action", `Review ${agentId}'s proposed action`, "Consequential external actions require Brandon's approval", exactChange, target, JSON.stringify({ message, conversationId }), "pending", now, now).run();
       const reply = "I prepared the requested action for Brandon’s review. Nothing has been executed or sent.";
       await persistMessage(agentId, conversationId, "assistant", reply, "awaiting_approval");
       await logActivity(agentId, "approval_requested", `Approval ${approvalId} created for ${target}.`);
@@ -130,7 +133,7 @@ export async function POST(request: Request) {
     ]);
     const memory = memoryRows.results.map((row: any) => `${row.category}: ${row.content}`).join("\n");
     const history = historyRows.results.reverse().slice(0, -1).map((row: any) => `${row.role}: ${row.message}`).join("\n");
-    const system = `You are ${agentId}, ${roles[agentId]}, for True Authentic Apparel. Be factual and concise. Use only the approved brand memory below as company truth. Never claim an integration is connected unless verified server context proves it. This request is analysis/drafting only: never send, publish, schedule, contact, or modify an external system. If the user asks for execution, explain that they must switch to Prepare for approval mode.\n\nAPPROVED BRAND MEMORY\n${memory}`;
+    const system = `You are ${agentId}, ${roles[agentId]}, for True Authentic Apparel. Be factual and concise. Use only the approved brand memory below as company truth. Never claim an integration is connected unless verified server context proves it. This request is analysis/drafting only: never send, publish, schedule, contact, or modify an external system. If live analytics or other source data was not provided in this request, say that it is unavailable rather than inventing results. If the user asks for execution, explain that they must switch to Prepare for approval mode.\n\nAPPROVED BRAND MEMORY\n${memory}`;
     const prompt = history ? `Recent workspace conversation:\n${history}\n\nCurrent request:\n${message}` : message;
     const reply = await generate(system, prompt);
     await persistMessage(agentId, conversationId, "assistant", reply);

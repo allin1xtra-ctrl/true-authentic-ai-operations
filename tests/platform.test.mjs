@@ -138,3 +138,32 @@ test("generated media stays server-side and approval controls remain isolated", 
   assert.doesNotMatch(`${generation}\n${ui}`, /NEXT_PUBLIC_.*OPENAI/);
   assert.doesNotMatch(generation, /api\/shopify/);
 });
+
+test("read-only requests do not create fake external approvals", async () => {
+  const agent = await readFile(new URL("../app/api/agent/route.ts", import.meta.url), "utf8");
+  assert.match(agent, /readOnlyRequest/);
+  assert.match(agent, /mode === "propose_action" && !readOnlyRequest/);
+  assert.match(agent, /live analytics or other source data was not provided/);
+});
+
+test("approval decisions disclose non-execution and clear stale conversation state", async () => {
+  const [state, ui] = await Promise.all([
+    readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(state, /No external action executed/);
+  assert.match(state, /UPDATE conversations SET status='ready'/);
+  assert.match(ui, /Approved · not executed/);
+  assert.match(ui, /does not execute/);
+  assert.doesNotMatch(ui, /Approve record/);
+});
+
+test("tasks reject rapid duplicate submissions and expose lifecycle controls", async () => {
+  const [state, ui] = await Promise.all([
+    readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(state, /duplicate: true/);
+  assert.match(ui, /Saving…/);
+  for (const label of ["Start", "Mark done", "Reopen"]) assert.match(ui, new RegExp(label));
+});
