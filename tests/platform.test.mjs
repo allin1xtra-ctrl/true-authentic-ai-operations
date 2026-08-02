@@ -82,7 +82,7 @@ test("Shopify OAuth is delegated to the protected Vercel backend", async () => {
   assert.match(connect, /api\/shopify\/oauth\/start/);
   assert.match(health, /api\/shopify\/status/);
   assert.match(example, /SHOPIFY_BACKEND_URL=/);
-  for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "INTEGRATION_ENCRYPTION_KEY"]) assert.doesNotMatch(example, new RegExp(`${key}=`));
+  for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_API_SECRET"]) assert.doesNotMatch(example, new RegExp(`${key}=`));
   assert.doesNotMatch(`${connect}\n${health}`, /SHOPIFY_API_(?:KEY|SECRET)/);
   assert.doesNotMatch(`${ui}\n${connect}`, /NEXT_PUBLIC_.*(?:TOKEN|SECRET)/);
 });
@@ -96,10 +96,11 @@ test("every disconnected settings card exposes an honest setup action", async ()
 });
 
 test("Meta OAuth is state-protected, encrypted, read-only, and live-validated", async () => {
-  const [start, callback, meta, health, ui] = await Promise.all([
+  const [start, callback, meta, encryption, health, ui] = await Promise.all([
     readFile(new URL("../app/api/integrations/meta/start/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/integrations/meta/callback/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/meta.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/integration-secrets.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
   ]);
@@ -107,7 +108,7 @@ test("Meta OAuth is state-protected, encrypted, read-only, and live-validated", 
   assert.match(start, /stateHash/);
   assert.match(callback, /used_at IS NULL/);
   assert.match(callback, /encryptMetaToken/);
-  assert.match(meta, /AES-GCM/);
+  assert.match(encryption, /AES-GCM/);
   assert.match(meta, /pages_show_list/);
   assert.match(meta, /pages_read_engagement/);
   assert.match(meta, /instagram_basic/);
@@ -115,6 +116,30 @@ test("Meta OAuth is state-protected, encrypted, read-only, and live-validated", 
   assert.match(health, /verifyMetaConnection/);
   assert.match(ui, /api\/integrations\/meta\/start/);
   assert.doesNotMatch(`${ui}\n${start}`, /NEXT_PUBLIC_.*META/);
+});
+
+test("GA4 and PostHog integrations are server-side, read-only, and live-validated", async () => {
+  const [ui, health, ga4Start, ga4Callback, ga4, posthog, example] = await Promise.all([
+    readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/integrations/ga4/start/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/integrations/ga4/callback/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/ga4.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/posthog.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  assert.match(ui, /GOOGLE ANALYTICS 4/);
+  assert.match(ui, /POSTHOG/);
+  assert.match(ga4Start, /crypto\.randomUUID/);
+  assert.match(ga4Callback, /used_at IS NULL/);
+  assert.match(ga4Callback, /encryptIntegrationSecret/);
+  assert.match(ga4, /analytics\.readonly/);
+  assert.doesNotMatch(`${ga4Start}\n${ga4Callback}\n${ga4}`, /analytics\.edit/);
+  assert.match(posthog, /POSTHOG_PERSONAL_API_KEY/);
+  assert.match(health, /verifyGa4Connection/);
+  assert.match(health, /verifyPostHogConnection/);
+  for (const key of ["GOOGLE_ANALYTICS_CLIENT_ID", "GOOGLE_ANALYTICS_CLIENT_SECRET", "POSTHOG_PERSONAL_API_KEY"]) assert.match(example, new RegExp(`${key}=`));
+  assert.doesNotMatch(`${ui}\n${health}`, /NEXT_PUBLIC_.*(?:GOOGLE|POSTHOG|META)/);
 });
 
 test("generated media stays server-side and approval controls remain isolated", async () => {

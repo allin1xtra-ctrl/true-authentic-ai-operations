@@ -17,6 +17,8 @@ const integrations = [
   ["shopify", "Shopify", "connection_required", "Connection required", "orders, products, fulfillment, sales"],
   ["gmail", "Gmail", "connection_required", "Connection required", "search inbox, read threads, prepare drafts"],
   ["meta", "Meta", "connection_required", "Connection required", "Facebook Page and Instagram account discovery"],
+  ["ga4", "Google Analytics 4", "connection_required", "Connection required", "read-only traffic, engagement, acquisition, and conversion reporting"],
+  ["posthog", "PostHog", "connection_required", "Connection required", "read-only product analytics, funnels, paths, and retention"],
   ["scheduling", "Scheduling", "connection_required", "Connection required", "daily command brief"],
 ];
 
@@ -40,6 +42,8 @@ async function seed() {
   }
   // No adapter may claim a live connection until it has a successful server-side check.
   await db.prepare("INSERT INTO integrations (id,name,status,explanation,capabilities,last_checked) VALUES ('meta','Meta','connection_required','Connection required','Facebook Page and Instagram account discovery',NULL) ON CONFLICT(id) DO NOTHING").run();
+  await db.prepare("INSERT INTO integrations (id,name,status,explanation,capabilities,last_checked) VALUES ('ga4','Google Analytics 4','connection_required','Connection required','read-only traffic, engagement, acquisition, and conversion reporting',NULL) ON CONFLICT(id) DO NOTHING").run();
+  await db.prepare("INSERT INTO integrations (id,name,status,explanation,capabilities,last_checked) VALUES ('posthog','PostHog','connection_required','Connection required','read-only product analytics, funnels, paths, and retention',NULL) ON CONFLICT(id) DO NOTHING").run();
   await db.prepare("UPDATE integrations SET status='connection_required', explanation='Connection required', last_checked=NULL WHERE id IN ('ai','shopify','gmail','scheduling')").run();
   await db.prepare("UPDATE approvals SET execution_result='Approved. No external action executed because no verified execution adapter is attached to this proposal.' WHERE status='approved' AND execution_result IS NULL").run();
   await db.prepare("UPDATE approvals SET execution_result='Rejected. No external action executed.' WHERE status='rejected' AND execution_result IS NULL").run();

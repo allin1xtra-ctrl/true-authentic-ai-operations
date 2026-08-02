@@ -1,6 +1,8 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { ensureSchema, getStore } from "../../../db/store";
 import { verifyMetaConnection } from "../../../lib/meta";
+import { verifyGa4Connection } from "../../../lib/ga4";
+import { verifyPostHogConnection } from "../../../lib/posthog";
 
 const SHOPIFY_BACKEND = "https://true-authentic-ai-team-backend.vercel.app";
 const SITES_ORIGIN = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site";
@@ -59,12 +61,14 @@ export async function GET() {
     database = { status: "error", checkedAt: new Date().toISOString() };
   }
 
-  const [shopify, meta] = await Promise.all([verifyShopify(), verifyMetaConnection()]);
+  const [shopify, meta, ga4, posthog] = await Promise.all([verifyShopify(), verifyMetaConnection(), verifyGa4Connection(), verifyPostHogConnection()]);
   const integrations = {
     openai: ai,
     shopify,
     gmail: { status: "connection_required" as Status, checkedAt: null },
     meta,
+    ga4,
+    posthog,
     scheduling: { status: "connection_required" as Status, checkedAt: null },
   };
   const requiredIntegration: Record<string, keyof typeof integrations | null> = { monroe: null, avery: null, sage: "meta", cleo: "gmail", lennox: "shopify" };
