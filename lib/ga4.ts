@@ -8,7 +8,8 @@ export function ga4Config() {
   const clientId = process.env.GOOGLE_ANALYTICS_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_ANALYTICS_CLIENT_SECRET?.trim();
   const encryptionKey = process.env.INTEGRATION_ENCRYPTION_KEY?.trim();
-  return { clientId, clientSecret, configured: Boolean(clientId && clientSecret && encryptionKey) };
+  const propertyId = process.env.GOOGLE_ANALYTICS_PROPERTY_ID?.trim()?.replace(/^properties\//, "");
+  return { clientId, clientSecret, propertyId, configured: Boolean(clientId && clientSecret && encryptionKey) };
 }
 
 export async function refreshGa4AccessToken(refreshToken: string) {

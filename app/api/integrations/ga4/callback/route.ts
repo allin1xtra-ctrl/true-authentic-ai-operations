@@ -9,7 +9,7 @@ async function hash(value: string) { const bytes = await crypto.subtle.digest("S
 export async function GET(request: Request) {
   const incoming = new URL(request.url); const code = incoming.searchParams.get("code"); const state = incoming.searchParams.get("state");
   if (!code || !state || incoming.searchParams.has("error")) return done("denied");
-  const { clientId, clientSecret, configured } = ga4Config(); if (!configured || !clientId || !clientSecret) return done("configuration");
+  const { clientId, clientSecret, propertyId: configuredPropertyId, configured } = ga4Config(); if (!configured || !clientId || !clientSecret) return done("configuration");
   try {
     const db = getStore(); await ensureSchema(db); const stateHash = await hash(state); const now = new Date().toISOString();
     const saved = await db.prepare("SELECT id FROM oauth_states WHERE provider='ga4' AND state_hash=? AND used_at IS NULL AND expires_at>?").bind(stateHash, now).first() as { id: string } | null;
@@ -20,11 +20,17 @@ export async function GET(request: Request) {
     if (!tokenResponse.ok) return done("exchange_failed");
     const token = await tokenResponse.json() as { access_token?: string; refresh_token?: string; scope?: string };
     if (!token.access_token || !token.refresh_token || !token.scope?.split(" ").includes(GA4_SCOPES[0])) return done("permissions");
-    const summariesResponse = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200", { headers: { authorization: `Bearer ${token.access_token}` } });
-    if (!summariesResponse.ok) return done("validation_failed");
-    const summaries = await summariesResponse.json() as { accountSummaries?: Array<{ displayName?: string; propertySummaries?: Array<{ property?: string; displayName?: string }> }> };
-    const account = summaries.accountSummaries?.find((item) => item.propertySummaries?.length);
-    const property = account?.propertySummaries?.[0]; const propertyId = property?.property?.replace("properties/", "");
+    let account: { displayName?: string; propertySummaries?: Array<{ property?: string; displayName?: string }> } | undefined;
+    let property: { property?: string; displayName?: string } | undefined;
+    let propertyId = configuredPropertyId;
+    if (!propertyId) {
+      const summariesResponse = await fetch("https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200", { headers: { authorization: `Bearer ${token.access_token}` } });
+      if (!summariesResponse.ok) return done("validation_failed");
+      const summaries = await summariesResponse.json() as { accountSummaries?: Array<{ displayName?: string; propertySummaries?: Array<{ property?: string; displayName?: string }> }> };
+      account = summaries.accountSummaries?.find((item) => item.propertySummaries?.length);
+      property = account?.propertySummaries?.[0];
+      propertyId = property?.property?.replace("properties/", "");
+    }
     if (!propertyId) return done("no_property");
     const reportResponse = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${encodeURIComponent(propertyId)}:runReport`, { method: "POST", headers: { authorization: `Bearer ${token.access_token}`, "content-type": "application/json" }, body: JSON.stringify({ dateRanges: [{ startDate: "7daysAgo", endDate: "today" }], metrics: [{ name: "activeUsers" }], limit: 1 }) });
     if (!reportResponse.ok) return done("validation_failed");

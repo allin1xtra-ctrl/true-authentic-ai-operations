@@ -134,6 +134,8 @@ test("GA4 and PostHog integrations are server-side, read-only, and live-validate
   assert.match(ga4Callback, /used_at IS NULL/);
   assert.match(ga4Callback, /encryptIntegrationSecret/);
   assert.match(ga4, /analytics\.readonly/);
+  assert.match(ga4, /GOOGLE_ANALYTICS_PROPERTY_ID/);
+  assert.match(ga4Callback, /configuredPropertyId/);
   assert.doesNotMatch(`${ga4Start}\n${ga4Callback}\n${ga4}`, /analytics\.edit/);
   assert.match(posthog, /POSTHOG_PERSONAL_API_KEY/);
   assert.match(health, /verifyGa4Connection/);
