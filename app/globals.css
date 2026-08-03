@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+.ta-login{min-height:100vh;display:grid;place-items:center;background:#171315;color:#f8f3ed;padding:24px}.ta-login section{width:min(440px,100%);background:#241c20;border:1px solid #59303b;border-radius:20px;padding:36px}.ta-login h1{font-size:2.5rem;margin:.4rem 0 1rem}.ta-login form{display:grid;gap:18px;margin-top:28px}.ta-login label{display:grid;gap:8px}.ta-login input{min-height:48px;border:1px solid #78505a;border-radius:10px;background:#120f10;color:#fff;padding:10px 12px}.ta-login button{min-height:48px;border:0;border-radius:10px;background:#7b1932;color:#fff;font-weight:700}.ta-login button:focus-visible,.ta-login input:focus-visible{outline:3px solid #fff;outline-offset:2px}
+
 :root { --ink:#171417; --muted:#746d70; --paper:#f4f0ec; --panel:#fffdfb; --line:#ded5d0; --oxblood:#681c2d; --burgundy:#8c2b3f; --soft:#eee5e2; }
 * { box-sizing:border-box; }
 html { background:var(--paper); }

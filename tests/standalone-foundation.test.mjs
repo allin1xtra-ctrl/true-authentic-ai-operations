@@ -1,0 +1,5 @@
+import test from "node:test";import assert from "node:assert/strict";import {readFile} from "node:fs/promises";
+const read=(path)=>readFile(new URL(`../${path}`,import.meta.url),"utf8");
+test("standalone foundation is organization scoped",async()=>{const sql=await read("migrations/postgres/0001_foundation.sql");for(const table of ["organizations","users","organization_memberships","sessions","login_history","audit_logs"])assert.match(sql,new RegExp(`CREATE TABLE ${table}`));assert.match(sql,/organization_id/);});
+test("sessions are protected and revocable",async()=>{const auth=await read("lib/standalone-auth.ts");assert.match(auth,/httpOnly:true/);assert.match(auth,/sameSite:"lax"/);assert.match(auth,/revoked_at IS NULL/);assert.match(auth,/PBKDF2/);assert.doesNotMatch(auth,/localStorage|NEXT_PUBLIC/);});
+test("roles preserve owner authority",async()=>{const permissions=await read("lib/permissions.ts");assert.match(permissions,/owner:new Set\(\["\*"\]\)/);assert.match(permissions,/approval:decide/);assert.doesNotMatch(permissions,/read_only_analyst:new Set\(\[[^\]]*write/);});

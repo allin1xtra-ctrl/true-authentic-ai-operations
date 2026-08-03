@@ -1,0 +1,2 @@
+const grants: Record<string, Set<string>>={owner:new Set(["*"]),administrator:new Set(["read","task:write","approval:decide","settings:write"]),team_member:new Set(["read","task:write"]),read_only_analyst:new Set(["read"]),contractor:new Set(["read","task:write"])};
+export function can(role:string,permission:string){const allowed=grants[role];return Boolean(allowed?.has("*")||allowed?.has(permission));}

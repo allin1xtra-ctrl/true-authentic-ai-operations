@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { currentStandaloneUser } from "../lib/standalone-auth";
 
 export type ChatGPTUser = {
   displayName: string;
@@ -17,6 +18,8 @@ const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
+  const standalone = await currentStandaloneUser();
+  if (standalone) return { displayName: standalone.displayName, email: standalone.email, fullName: standalone.displayName };
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!email) return null;
@@ -40,6 +43,8 @@ export async function requireChatGPTUser(
 ): Promise<ChatGPTUser> {
   const user = await getChatGPTUser();
   if (user) return user;
+
+  if (process.env.DATABASE_URL) redirect(`/login?return_to=${encodeURIComponent(safeRelativeReturnPath(returnTo))}`);
 
   redirect(chatGPTSignInPath(returnTo));
 }
