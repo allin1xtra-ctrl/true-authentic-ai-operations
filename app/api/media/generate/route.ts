@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { del, put } from "@vercel/blob";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { ensureSchema, getStore, id } from "../../../../db/store";
 
@@ -14,20 +14,20 @@ function decodeBase64(value: string) {
 }
 
 async function saveGenerated(contextType: string, contextId: string, bytes: Uint8Array, mimeType: string, name: string) {
-  if (!env.MEDIA) throw new Error("MEDIA_UNAVAILABLE");
+  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.BLOB_STORE_ID) throw new Error("MEDIA_UNAVAILABLE");
   const attachmentId = id("media"); const objectKey = `private/generated/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${mimeType === "video/mp4" ? "mp4" : "png"}`;
   const payload = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  await env.MEDIA.put(objectKey, payload, { httpMetadata: { contentType: mimeType } });
+  await put(objectKey, payload, { access: "private", contentType: mimeType, addRandomSuffix: false });
   const db = getStore();
   try { await db.prepare("INSERT INTO media_attachments (id,context_type,context_id,object_key,file_name,mime_type,size_bytes,source,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(attachmentId, contextType, contextId, objectKey, name, mimeType, bytes.byteLength, "generated", new Date().toISOString()).run(); }
-  catch (error) { await env.MEDIA.delete(objectKey); throw error; }
+  catch (error) { await del(objectKey); throw error; }
   return attachmentId;
 }
 
 export async function POST(request: Request) {
   if (!await getChatGPTUser()) return Response.json({ success: false, error: "Authentication required" }, { status: 401 });
   if (!process.env.OPENAI_API_KEY) return Response.json({ success: false, error: "OpenAI media generation is not configured" }, { status: 503 });
-  if (!env.MEDIA) return Response.json({ success: false, error: "Media storage is not connected" }, { status: 503 });
+  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.BLOB_STORE_ID) return Response.json({ success: false, error: "Media storage is not connected" }, { status: 503 });
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > maxRequestBytes) return Response.json({ success: false, error: "This request is too large. Shorten the prompt and try again." }, { status: 413 });
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;

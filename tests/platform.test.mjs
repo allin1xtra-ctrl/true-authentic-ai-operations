@@ -21,13 +21,14 @@ test("agent API enforces approval and a consistent contract", async () => {
   assert.doesNotMatch(source, /NEXT_PUBLIC_.*KEY/);
 });
 
-test("durable records use D1 and seed approved brand memory", async () => {
-  const [hosting, state, schema] = await Promise.all([
-    readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
+test("durable records use Neon Postgres and seed approved brand memory", async () => {
+  const [store, state, schema] = await Promise.all([
+    readFile(new URL("../db/store.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0000_quick_lyja.sql", import.meta.url), "utf8"),
   ]);
-  assert.match(hosting, /"d1": "DB"/);
+  assert.match(store, /DATABASE_URL/);
+  assert.match(store, /postgres\(\)\.query/);
   assert.match(state, /The Truth Is Always Authentic/);
   assert.match(schema, /CREATE TABLE `approvals`/);
   assert.match(schema, /CREATE TABLE `tasks`/);
@@ -145,10 +146,9 @@ test("GA4 and PostHog integrations are server-side, read-only, and live-validate
 });
 
 test("generated media stays server-side and approval controls remain isolated", async () => {
-  const [generation, media, hosting, ui] = await Promise.all([
+  const [generation, media, ui] = await Promise.all([
     readFile(new URL("../app/api/media/generate/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/media/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(generation, /getChatGPTUser/);
@@ -156,7 +156,8 @@ test("generated media stays server-side and approval controls remain isolated", 
   assert.match(generation, /sora-2/);
   assert.match(generation, /private\/generated/);
   assert.match(media, /cache-control": "private, no-store/);
-  assert.match(hosting, /"r2": "MEDIA"/);
+  assert.match(media, /@vercel\/blob/);
+  assert.match(media, /access: "private"/);
   assert.match(ui, /Create with AI/);
   assert.match(ui, /readApiResponse/);
   assert.match(ui, /response\.status === 413/);
@@ -196,28 +197,28 @@ test("tasks reject rapid duplicate submissions and expose lifecycle controls", a
 });
 
 test("phase one automations are durable, scheduled, and read-only", async () => {
-  const [automation, worker, store, ui, hosting] = await Promise.all([
+  const [automation, cron, store, ui, vercel] = await Promise.all([
     readFile(new URL("../lib/automations.ts", import.meta.url), "utf8"),
-    readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cron/automations/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/store.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
+    readFile(new URL("../vercel.json", import.meta.url), "utf8"),
   ]);
   for (const table of ["automation_schedules", "automation_runs", "inbox_items"]) assert.match(store, new RegExp(table));
-  assert.match(worker, /async scheduled/);
-  assert.match(worker, /AUTOMATION_CRON_SECRET/);
+  assert.match(cron, /CRON_SECRET/);
+  assert.match(cron, /runDueAutomations/);
   assert.match(automation, /Never send, publish, contact, purchase, modify, or execute/);
   assert.match(automation, /No external action executed/);
   assert.match(ui, /Operations inbox/);
   assert.match(ui, /Run now/);
-  assert.match(hosting, /"d1": "DB"/);
+  assert.match(vercel, /api\/cron\/automations/);
 });
 
 test("automation API requires identity or the protected scheduler secret", async () => {
   const route = await readFile(new URL("../app/api/automations/route.ts", import.meta.url), "utf8");
   assert.match(route, /getChatGPTUser/);
   assert.match(route, /x-automation-secret/);
-  assert.match(route, /AUTOMATION_CRON_SECRET/);
+  assert.match(route, /CRON_SECRET/);
   assert.match(route, /isSafeScheduledInstruction/);
   assert.doesNotMatch(route, /NEXT_PUBLIC_.*SECRET/);
 });

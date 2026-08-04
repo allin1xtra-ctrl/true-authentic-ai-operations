@@ -1,11 +1,10 @@
-import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { ensureSchema, getStore, id } from "../../../db/store";
 import { agentIds, isSafeScheduledInstruction, nextRunAt, runDueAutomations } from "../../../lib/automations";
 
 async function authorized(request: Request) {
   const supplied = request.headers.get("x-automation-secret");
-  if (env.AUTOMATION_CRON_SECRET && supplied && supplied === env.AUTOMATION_CRON_SECRET) return true;
+  if (process.env.CRON_SECRET && supplied && supplied === process.env.CRON_SECRET) return true;
   return Boolean(await getChatGPTUser());
 }
 
@@ -17,7 +16,7 @@ export async function GET(request: Request) {
     db.prepare("SELECT * FROM automation_runs ORDER BY created_at DESC LIMIT 100").all(),
     db.prepare("SELECT * FROM inbox_items ORDER BY created_at DESC LIMIT 100").all(),
   ]);
-  return Response.json({ success: true, schedules: schedules.results, runs: runs.results, inbox: inbox.results, schedulerConfigured: Boolean(env.AUTOMATION_CRON_SECRET) });
+  return Response.json({ success: true, schedules: schedules.results, runs: runs.results, inbox: inbox.results, schedulerConfigured: Boolean(process.env.CRON_SECRET) });
 }
 
 export async function POST(request: Request) {

@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { del, get, put } from "@vercel/blob";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { ensureSchema, getStore, id } from "../../../db/store";
 
@@ -12,7 +12,7 @@ function safeName(name: string) {
 
 export async function POST(request: Request) {
   if (!await getChatGPTUser()) return Response.json({ success: false, error: "Authentication required" }, { status: 401 });
-  if (!env.MEDIA) return Response.json({ success: false, error: "Media storage is not connected" }, { status: 503 });
+  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.BLOB_STORE_ID) return Response.json({ success: false, error: "Media storage is not connected" }, { status: 503 });
   try {
     const form = await request.formData();
     const file = form.get("file");
@@ -28,13 +28,13 @@ export async function POST(request: Request) {
     const attachmentId = id("media");
     const extension = safeName(file.name).split(".").pop()?.toLowerCase().slice(0, 8) || "bin";
     const objectKey = `private/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${extension}`;
-    await env.MEDIA.put(objectKey, file.stream(), { httpMetadata: { contentType: file.type } });
+    await put(objectKey, file, { access: "private", contentType: file.type, addRandomSuffix: false });
     const db = getStore(); await ensureSchema(db);
     try {
       await db.prepare("INSERT INTO media_attachments (id,context_type,context_id,object_key,file_name,mime_type,size_bytes,source,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
         .bind(attachmentId, contextType, contextId, objectKey, safeName(file.name), file.type, file.size, source, new Date().toISOString()).run();
     } catch (error) {
-      await env.MEDIA.delete(objectKey);
+      await del(objectKey);
       throw error;
     }
     return Response.json({ success: true, attachment: { id: attachmentId, context_type: contextType, context_id: contextId, file_name: safeName(file.name), mime_type: file.type, size_bytes: file.size, source, created_at: new Date().toISOString() } }, { status: 201 });
@@ -45,13 +45,13 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   if (!await getChatGPTUser()) return Response.json({ success: false, error: "Authentication required" }, { status: 401 });
-  if (!env.MEDIA) return Response.json({ success: false, error: "Media storage is not connected" }, { status: 503 });
+  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.BLOB_STORE_ID) return Response.json({ success: false, error: "Media storage is not connected" }, { status: 503 });
   const mediaId = new URL(request.url).searchParams.get("id");
   if (!mediaId) return Response.json({ success: false, error: "Media ID is required" }, { status: 400 });
   const db = getStore(); await ensureSchema(db);
   const row = await db.prepare("SELECT object_key, file_name, mime_type FROM media_attachments WHERE id=?").bind(mediaId).first() as { object_key: string; file_name: string; mime_type: string } | null;
   if (!row) return Response.json({ success: false, error: "Media not found" }, { status: 404 });
-  const object = await env.MEDIA.get(row.object_key);
+  const object = await get(row.object_key, { access: "private", useCache: false });
   if (!object) return Response.json({ success: false, error: "Media file is unavailable" }, { status: 404 });
-  return new Response(object.body, { headers: { "content-type": row.mime_type, "content-disposition": `inline; filename="${safeName(row.file_name)}"`, "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
+  return new Response(object.stream, { headers: { "content-type": row.mime_type, "content-disposition": `inline; filename="${safeName(row.file_name)}"`, "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
 }
