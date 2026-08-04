@@ -22,7 +22,7 @@ export async function POST(request:Request){
   if(!configured||configured.length<32||supplied.length<32||!await secureEqual(supplied,configured))return Response.json({success:false,error:"Account setup is unavailable or the one-time setup code is invalid."},{status:404});
   const body=await request.json().catch(()=>({})) as {email?:string;password?:string;displayName?:string;organizationName?:string};
   const email=String(body.email||"").trim().toLowerCase(),password=String(body.password||""),displayName=String(body.displayName||"").trim(),organizationName=String(body.organizationName||"True Authentic Apparel").trim();
-  if(!/^\S+@\S+\.\S+$/.test(email)||password.length<14||!displayName)return Response.json({success:false,error:"Valid owner details are required"},{status:400});
+  if(!/^\S+@\S+\.\S+$/.test(email)||password.length<15||!displayName)return Response.json({success:false,error:"Valid owner details are required"},{status:400});
   try {
     const sql=postgres();const existing=await sql`SELECT id FROM users LIMIT 1`;if(existing.length)return Response.json({success:false,error:"The owner account has already been created. Sign in instead."},{status:409});
     const organizationId=crypto.randomUUID(),userId=crypto.randomUUID(),now=new Date().toISOString(),hash=await passwordHash(password);

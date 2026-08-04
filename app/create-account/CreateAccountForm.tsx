@@ -53,9 +53,9 @@ export default function CreateAccountForm() {
       <label>Display name<input name="displayName" autoComplete="name" required /></label>
       <label>Organization<input name="organizationName" defaultValue="True Authentic Apparel" autoComplete="organization" required /></label>
       <label>Email<input name="email" type="email" autoComplete="email" required /></label>
-      <label>Password<input name="password" type="password" autoComplete="new-password" minLength={14} required aria-describedby="password-help" /></label>
-      <small id="password-help">Use at least 14 characters and a password you do not use elsewhere.</small>
-      <label>Confirm password<input name="passwordConfirmation" type="password" autoComplete="new-password" minLength={14} required /></label>
+      <label>Password<input name="password" type="password" autoComplete="new-password" minLength={15} required aria-describedby="password-help" /></label>
+      <small id="password-help">Use at least 15 characters and a password you do not use elsewhere.</small>
+      <label>Confirm password<input name="passwordConfirmation" type="password" autoComplete="new-password" minLength={15} required /></label>
       <label>One-time setup code<input name="setupCode" type="password" autoComplete="off" minLength={32} required /></label>
       {error && <p className="ta-auth-error" role="alert">{error}</p>}
       <button disabled={busy}>{busy ? "Creating account…" : "Create owner account"}</button>
