@@ -1,3 +1,17 @@
 import LoginForm from "./LoginForm";
-export const dynamic="force-dynamic";
-export default async function LoginPage({searchParams}:{searchParams:Promise<{account?:string}>}){const query=await searchParams;return <main className="ta-login"><section><p>TRUE AUTHENTIC APPAREL</p><h1>AI Operations</h1><p>Sign in to the standalone command center.</p><LoginForm created={query.account==="created"} /><p className="ta-auth-switch">First time here? <a href="/create-account">Create the owner account</a></p></section></main>}
+
+export const dynamic = "force-dynamic";
+
+export default function LoginPage() {
+  return (
+    <main className="ta-login">
+      <section>
+        <p>TRUE AUTHENTIC APPAREL</p>
+        <h1>AI Operations</h1>
+        <p>Sign in to the standalone command center.</p>
+        <LoginForm />
+        <p className="ta-auth-switch">First time here? <a href="/create-account">Create the owner account</a></p>
+      </section>
+    </main>
+  );
+}
