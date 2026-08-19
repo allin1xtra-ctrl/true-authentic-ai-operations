@@ -8,6 +8,7 @@ import { passwordPolicyValid } from "../lib/account-policy.mjs";
 
 const pbkdf2 = promisify(pbkdf2Callback);
 const databaseUrl = String(process.env.DATABASE_URL || "").trim();
+const privateEnvironmentMode = process.argv.includes("--private-env");
 
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is required. Run this command only from a private, trusted terminal.");
@@ -55,12 +56,12 @@ async function hashPassword(password) {
 
 const prompt = createInterface({ input: stdin, output: stdout });
 try {
-  const displayName = (await prompt.question("Owner name: ")).trim();
-  const organizationName = (await prompt.question("Organization: ")).trim();
-  const email = (await prompt.question("Owner email: ")).trim().toLowerCase();
-  prompt.pause();
-  const password = await hiddenPrompt("Password (hidden, 12-256 characters): ");
-  const confirmation = await hiddenPrompt("Confirm password (hidden): ");
+  const displayName = privateEnvironmentMode ? String(process.env.OWNER_PROVISION_NAME || "").trim() : (await prompt.question("Owner name: ")).trim();
+  const organizationName = privateEnvironmentMode ? String(process.env.OWNER_PROVISION_ORGANIZATION || "").trim() : (await prompt.question("Organization: ")).trim();
+  const email = (privateEnvironmentMode ? String(process.env.OWNER_PROVISION_EMAIL || "") : await prompt.question("Owner email: ")).trim().toLowerCase();
+  if (!privateEnvironmentMode) prompt.pause();
+  const password = privateEnvironmentMode ? String(process.env.OWNER_PROVISION_PASSWORD || "") : await hiddenPrompt("Password (hidden, 12-256 characters): ");
+  const confirmation = privateEnvironmentMode ? String(process.env.OWNER_PROVISION_CONFIRMATION || "") : await hiddenPrompt("Confirm password (hidden): ");
 
   if (!displayName || !organizationName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error("A valid name, organization, and email are required.");
