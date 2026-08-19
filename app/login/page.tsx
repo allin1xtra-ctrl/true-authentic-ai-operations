@@ -10,7 +10,6 @@ export default function LoginPage() {
         <h1>AI Operations</h1>
         <p>Sign in to the standalone command center.</p>
         <LoginForm />
-        <p className="ta-auth-switch">First time here? <a href="/create-account">Create the owner account</a></p>
       </section>
     </main>
   );
