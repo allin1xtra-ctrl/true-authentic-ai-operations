@@ -42,8 +42,20 @@ test("protected routes require server-side identity", async () => {
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /requireChatGPTUser/);
+  assert.match(page, /currentStandaloneUser/);
+  assert.match(page, /redirect\("\/login/);
+  assert.doesNotMatch(page, /requireChatGPTUser|oai-authenticated/);
   for (const source of [agent, state, health]) assert.match(source, /getChatGPTUser/);
+});
+
+test("standalone authentication always redirects to the local login route", async () => {
+  const auth = await readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8");
+  const requireUser = auth.slice(
+    auth.indexOf("export async function requireChatGPTUser"),
+    auth.indexOf("export function chatGPTSignInPath"),
+  );
+  assert.match(requireUser, /redirect\(`\/login\?return_to=/);
+  assert.doesNotMatch(requireUser, /chatGPTSignInPath/);
 });
 
 test("employee readiness is live, integration-specific, and approval-backed", async () => {
