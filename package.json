@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "owner:create": "node scripts/create-owner.mjs",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
