@@ -1,9 +1,10 @@
 import OperationsPlatform from "./OperationsPlatform";
-import { requireChatGPTUser } from "./chatgpt-auth";
+import { redirect } from "next/navigation";
+import { currentStandaloneUser } from "../lib/standalone-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  await requireChatGPTUser("/");
+  if (!await currentStandaloneUser()) redirect("/login?return_to=%2F");
   return <OperationsPlatform />;
 }

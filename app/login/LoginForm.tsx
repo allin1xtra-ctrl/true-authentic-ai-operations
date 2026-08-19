@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { safeReturnPath } from "../../lib/account-policy.mjs";
 
 export default function LoginForm({ created = false }: { created?: boolean }) {
   const [error, setError] = useState("");
@@ -16,7 +17,7 @@ export default function LoginForm({ created = false }: { created?: boolean }) {
       body: JSON.stringify({ email: data.get("email"), password: data.get("password") }),
     });
     if (response.ok) {
-      location.href = new URLSearchParams(location.search).get("return_to") || "/";
+      location.href = safeReturnPath(new URLSearchParams(location.search).get("return_to") || "/");
       return;
     }
     setError("Sign-in failed. Check your credentials and try again.");
@@ -28,7 +29,7 @@ export default function LoginForm({ created = false }: { created?: boolean }) {
       {created && <p className="ta-auth-success" role="status">Owner account created. Sign in with your new password.</p>}
       <form onSubmit={submit}>
         <label>Email<input name="email" type="email" autoComplete="email" required /></label>
-        <label>Password<input name="password" type="password" autoComplete="current-password" minLength={12} required /></label>
+        <label>Password<input name="password" type="password" autoComplete="current-password" minLength={12} maxLength={256} required /></label>
         {error && <p className="ta-auth-error" role="alert">{error}</p>}
         <button disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       </form>

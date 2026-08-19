@@ -27,7 +27,7 @@ export function safeEqual(left: string, right: string) {
 
 export async function sendVerificationCode(email: string, code: string) {
   const apiKey = String(process.env.RESEND_API_KEY || "");
-  const from = String(process.env.AUTH_EMAIL_FROM || "");
+  const from = String(process.env.RESEND_FROM_EMAIL || "");
   if (!apiKey || !from) throw new Error("AUTH_EMAIL_NOT_CONFIGURED");
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",

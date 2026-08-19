@@ -42,7 +42,9 @@ test("protected routes require server-side identity", async () => {
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /requireChatGPTUser/);
+  assert.match(page, /currentStandaloneUser/);
+  assert.match(page, /redirect\("\/login/);
+  assert.doesNotMatch(page, /requireChatGPTUser|oai-authenticated/);
   for (const source of [agent, state, health]) assert.match(source, /getChatGPTUser/);
 });
 
