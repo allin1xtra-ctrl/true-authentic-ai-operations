@@ -11,17 +11,22 @@ export default function LoginForm({ created = false }: { created?: boolean }) {
     setBusy(true);
     setError("");
     const data = new FormData(event.currentTarget);
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: data.get("email"), password: data.get("password") }),
-    });
-    if (response.ok) {
-      location.href = safeReturnPath(new URLSearchParams(location.search).get("return_to") || "/");
-      return;
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: data.get("email"), password: data.get("password") }),
+      });
+      if (response.ok) {
+        location.href = safeReturnPath(new URLSearchParams(location.search).get("return_to") || "/");
+        return;
+      }
+      setError("Sign-in failed. Check your credentials and try again.");
+    } catch {
+      setError("Sign-in is temporarily unavailable. Check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
-    setError("Sign-in failed. Check your credentials and try again.");
-    setBusy(false);
   }
 
   return (
