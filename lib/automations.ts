@@ -33,7 +33,7 @@ async function runSchedule(db: D1Like, schedule: Record<string, unknown>) {
   try {
     const memories = await db.prepare("SELECT category,content FROM memories WHERE approved=1 ORDER BY created_at ASC LIMIT 100").all<{ category: string; content: string }>();
     const memory = memories.results.map((item) => `${item.category}: ${item.content}`).join("\n");
-    const system = `You are ${agentId}, an AI employee for True Authentic Apparel, completing a scheduled read-only assignment. Use only the approved business memory below. Never send, publish, contact, purchase, modify, or execute an external action. Never invent analytics or integration data. If required live data is unavailable, state exactly what connection is missing and give a useful plan or draft instead.\n\nAPPROVED BUSINESS MEMORY\n${memory}`;
+    const system = `You are ${agentId}, an AI employee for True Authentic Apparel, completing a scheduled read-only assignment. Use only the approved business memory below. Never send, publish, contact, purchase, modify, or execute an external action. Never invent analytics or integration data. If required live data is unavailable, state exactly what connection is missing and give a useful plan or draft instead. The platform automatically stores your final response in the Operations Inbox, so provide the completed response directly and never claim that you cannot save it there.\n\nAPPROVED BUSINESS MEMORY\n${memory}`;
     const output = await generateAI(system, String(schedule.instruction));
     const completedAt = new Date().toISOString();
     await db.prepare("UPDATE automation_runs SET status='completed',output=?,completed_at=? WHERE id=?").bind(output.slice(0, 12000), completedAt, runId).run();
