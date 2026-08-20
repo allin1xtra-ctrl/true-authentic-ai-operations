@@ -3,6 +3,7 @@ import { ensureSchema, getStore } from "../../../db/store";
 import { verifyMetaConnection } from "../../../lib/meta";
 import { verifyGa4Connection } from "../../../lib/ga4";
 import { verifyPostHogConnection } from "../../../lib/posthog";
+import { verifyRedis } from "../../../lib/redis";
 
 const SHOPIFY_BACKEND = "https://true-authentic-ai-team-backend.vercel.app";
 const SITES_ORIGIN = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site";
@@ -61,7 +62,7 @@ export async function GET() {
     database = { status: "error", checkedAt: new Date().toISOString() };
   }
 
-  const [shopify, meta, ga4, posthog] = await Promise.all([verifyShopify(), verifyMetaConnection(), verifyGa4Connection(), verifyPostHogConnection()]);
+  const [shopify, meta, ga4, posthog, redis] = await Promise.all([verifyShopify(), verifyMetaConnection(), verifyGa4Connection(), verifyPostHogConnection(), verifyRedis()]);
   const integrations = {
     openai: ai,
     shopify,
@@ -79,5 +80,5 @@ export async function GET() {
     return [agentId, { status, requiredIntegration: integration, pendingApprovals: pendingByAgent[agentId] || 0 }];
   }));
 
-  return Response.json({ success: true, checkedAt: new Date().toISOString(), ai, database, integrations, employees });
+  return Response.json({ success: true, checkedAt: new Date().toISOString(), ai, database, redis, integrations, employees });
 }

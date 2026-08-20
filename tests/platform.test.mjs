@@ -221,9 +221,25 @@ test("phase one automations are durable, scheduled, and read-only", async () => 
   assert.match(cron, /runDueAutomations/);
   assert.match(automation, /Never send, publish, contact, purchase, modify, or execute/);
   assert.match(automation, /No external action executed/);
+  assert.match(automation, /platform automatically stores your final response in the Operations Inbox/);
   assert.match(ui, /Operations inbox/);
   assert.match(ui, /Run now/);
   assert.match(vercel, /api\/cron\/automations/);
+});
+
+test("health verifies Redis with a temporary set, get, and delete probe", async () => {
+  const [health, redis, example] = await Promise.all([
+    readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/redis.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  assert.match(health, /verifyRedis/);
+  assert.match(health, /database, redis, integrations/);
+  for (const command of ["SET", "GET", "DEL"]) assert.match(redis, new RegExp(`\\[\\\"${command}\\\"`));
+  assert.match(redis, /EX.*60/);
+  assert.match(redis, /finally/);
+  for (const key of ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"]) assert.match(example, new RegExp(`${key}=`));
+  assert.doesNotMatch(`${health}\n${redis}`, /NEXT_PUBLIC_.*UPSTASH/);
 });
 
 test("automation API requires identity or the protected scheduler secret", async () => {
