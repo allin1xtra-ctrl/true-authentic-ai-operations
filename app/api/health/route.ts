@@ -7,7 +7,7 @@ import { verifyRedis } from "../../../lib/redis";
 
 const SHOPIFY_BACKEND = "https://true-authentic-ai-team-backend.vercel.app";
 const SITES_ORIGIN = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site";
-const SHOPIFY_STORE = "true-authentic-apparel.myshopify.com";
+const SHOPIFY_STORE = "true-authentic-apparel-store.myshopify.com";
 
 type Status = "ready" | "working" | "awaiting_approval" | "connection_required" | "error";
 
