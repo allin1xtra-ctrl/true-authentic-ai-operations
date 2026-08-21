@@ -98,7 +98,8 @@ test("Shopify OAuth is delegated to a state-protected, encrypted, read-only back
   assert.match(ui, /Connect Shopify/);
   assert.match(connect, /api\/shopify\/oauth\/start/);
   assert.match(health, /api\/shopify\/status/);
-  assert.match(start, /getChatGPTUser/);
+  assert.doesNotMatch(start, /getChatGPTUser/);
+  assert.match(start, /shop !== SHOPIFY_STORE/);
   assert.match(callback, /validShopifyHmac/);
   assert.match(callback, /state_hash/);
   assert.match(callback, /validateShopifyReadAccess/);
