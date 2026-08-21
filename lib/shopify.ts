@@ -2,7 +2,7 @@ import { ensureSchema, getStore, id } from "../db/store";
 import { decryptIntegrationSecret, encryptIntegrationSecret } from "./integration-secrets";
 
 export const SHOPIFY_API_VERSION = "2026-07";
-export const SHOPIFY_STORE = "true-authentic-apparel-store.myshopify.com";
+export const SHOPIFY_STORE = "2f1f04-9f.myshopify.com";
 export const SHOPIFY_CALLBACK = "https://true-authentic-ai-team-backend.vercel.app/api/shopify/oauth/callback";
 export const SHOPIFY_APP = "https://true-authentic-ai-team-backend.vercel.app";
 const ALLOWED_SCOPES = ["read_products", "read_inventory", "read_orders", "read_fulfillments"];

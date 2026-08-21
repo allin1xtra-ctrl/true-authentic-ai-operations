@@ -106,8 +106,8 @@ test("Shopify OAuth is delegated to a state-protected, encrypted, read-only back
   assert.match(shopify, /encryptIntegrationSecret/);
   assert.match(shopify, /decryptIntegrationSecret/);
   assert.match(shopify, /graphql\.json/);
-  assert.match(shopify, /true-authentic-apparel-store\.myshopify\.com/);
-  assert.doesNotMatch(`${ui}\n${health}\n${shopify}`, /true-authentic-apparel\.myshopify\.com/);
+  assert.match(shopify, /2f1f04-9f\.myshopify\.com/);
+  assert.doesNotMatch(`${ui}\n${health}\n${shopify}`, /true-authentic-apparel(?:-store)?\.myshopify\.com/);
   assert.doesNotMatch(shopify, /write_/);
   assert.match(example, /SHOPIFY_BACKEND_URL=/);
   for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "SHOPIFY_REDIRECT_URI", "SHOPIFY_SCOPES", "INTEGRATION_ENCRYPTION_KEY"]) assert.match(example, new RegExp(`${key}=`));
