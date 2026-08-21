@@ -84,20 +84,32 @@ test("private credentials stay server-only and provider failures are sanitized",
   assert.doesNotMatch(example, /sk-[A-Za-z0-9]/);
 });
 
-test("Shopify OAuth is delegated to the protected Vercel backend", async () => {
-  const [ui, connect, health, example] = await Promise.all([
+test("Shopify OAuth is delegated to a state-protected, encrypted, read-only backend", async () => {
+  const [ui, connect, health, start, callback, status, shopify, example] = await Promise.all([
     readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/integrations/shopify/connect/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/shopify/oauth/start/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/shopify/oauth/callback/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/shopify/status/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/shopify.ts", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
   ]);
   assert.match(ui, /Connect Shopify/);
   assert.match(connect, /api\/shopify\/oauth\/start/);
   assert.match(health, /api\/shopify\/status/);
+  assert.match(start, /getChatGPTUser/);
+  assert.match(callback, /validShopifyHmac/);
+  assert.match(callback, /state_hash/);
+  assert.match(callback, /validateShopifyReadAccess/);
+  assert.match(status, /ALLOWED_ORIGIN/);
+  assert.match(shopify, /encryptIntegrationSecret/);
+  assert.match(shopify, /decryptIntegrationSecret/);
+  assert.match(shopify, /graphql\.json/);
+  assert.doesNotMatch(shopify, /write_/);
   assert.match(example, /SHOPIFY_BACKEND_URL=/);
-  for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_API_SECRET"]) assert.doesNotMatch(example, new RegExp(`${key}=`));
-  assert.doesNotMatch(`${connect}\n${health}`, /SHOPIFY_API_(?:KEY|SECRET)/);
-  assert.doesNotMatch(`${ui}\n${connect}`, /NEXT_PUBLIC_.*(?:TOKEN|SECRET)/);
+  for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "SHOPIFY_REDIRECT_URI", "SHOPIFY_SCOPES", "INTEGRATION_ENCRYPTION_KEY"]) assert.match(example, new RegExp(`${key}=`));
+  assert.doesNotMatch(`${ui}\n${connect}\n${health}\n${start}\n${callback}\n${status}\n${shopify}`, /NEXT_PUBLIC_.*(?:TOKEN|SECRET|SHOPIFY)/);
 });
 
 test("every disconnected settings card exposes an honest setup action", async () => {
