@@ -227,7 +227,7 @@ function Settings({ integrations, health, notifications, setNotifications }: any
     { key: "scheduling", label: "GOOGLE CALENDAR", action: "Set up Calendar" },
   ];
   async function connectShopify() {
-    const shop = window.prompt("Enter your Shopify store domain", "true-authentic-apparel-store.myshopify.com");
+    const shop = window.prompt("Enter your Shopify store domain", "2f1f04-9f.myshopify.com");
     if (!shop?.trim()) return;
     setConnecting(true); setConnectionMessage("");
     try {
