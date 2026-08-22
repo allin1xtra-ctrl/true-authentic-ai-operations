@@ -1,9 +1,7 @@
-import { getChatGPTUser } from "../../../../chatgpt-auth";
 import { ensureSchema, getStore, id } from "../../../../../db/store";
 import { META_REDIRECT_URI, META_SCOPES, metaConfig } from "../../../../../lib/meta";
 
 export async function POST() {
-  if (!await getChatGPTUser()) return Response.json({ success: false, error: "Authentication required" }, { status: 401 });
   const { appId, configured, version } = metaConfig();
   if (!configured || !appId) return Response.json({ success: false, error: "Meta connection is not configured on the server." }, { status: 503 });
   const state = crypto.randomUUID() + crypto.randomUUID();

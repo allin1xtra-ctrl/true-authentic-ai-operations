@@ -134,6 +134,7 @@ test("Meta OAuth is state-protected, encrypted, read-only, and live-validated", 
   ]);
   assert.match(start, /crypto\.randomUUID/);
   assert.match(start, /stateHash/);
+  assert.doesNotMatch(start, /getChatGPTUser/);
   assert.match(callback, /used_at IS NULL/);
   assert.match(callback, /encryptMetaToken/);
   assert.match(encryption, /AES-GCM/);
