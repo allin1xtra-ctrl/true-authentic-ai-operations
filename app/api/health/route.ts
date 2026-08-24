@@ -4,6 +4,7 @@ import { verifyMetaConnection } from "../../../lib/meta";
 import { verifyGa4Connection } from "../../../lib/ga4";
 import { verifyPostHogConnection } from "../../../lib/posthog";
 import { verifyRedis } from "../../../lib/redis";
+import { verifyGoogleWorkspaceConnection } from "../../../lib/google-workspace";
 
 const SHOPIFY_BACKEND = "https://true-authentic-ai-team-backend.vercel.app";
 const SITES_ORIGIN = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site";
@@ -62,15 +63,23 @@ export async function GET() {
     database = { status: "error", checkedAt: new Date().toISOString() };
   }
 
-  const [shopify, meta, ga4, posthog, redis] = await Promise.all([verifyShopify(), verifyMetaConnection(), verifyGa4Connection(), verifyPostHogConnection(), verifyRedis()]);
+  const [shopify, gmail, calendar, meta, ga4, posthog, redis] = await Promise.all([
+    verifyShopify(),
+    verifyGoogleWorkspaceConnection("gmail"),
+    verifyGoogleWorkspaceConnection("calendar"),
+    verifyMetaConnection(),
+    verifyGa4Connection(),
+    verifyPostHogConnection(),
+    verifyRedis(),
+  ]);
   const integrations = {
     openai: ai,
     shopify,
-    gmail: { status: "connection_required" as Status, checkedAt: null },
+    gmail,
     meta,
     ga4,
     posthog,
-    scheduling: { status: "connection_required" as Status, checkedAt: null },
+    scheduling: calendar,
   };
   const requiredIntegration: Record<string, keyof typeof integrations | null> = { monroe: null, avery: null, sage: "meta", cleo: "gmail", lennox: "shopify" };
   const employees = Object.fromEntries(Object.entries(requiredIntegration).map(([agentId, integration]) => {
