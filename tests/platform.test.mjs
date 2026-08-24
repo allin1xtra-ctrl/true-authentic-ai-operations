@@ -202,6 +202,23 @@ test("Gmail and Calendar use authenticated, state-protected, encrypted, read-onl
   assert.doesNotMatch(`${ui}\n${health}\n${workspace}`, /NEXT_PUBLIC_.*(?:GOOGLE|GMAIL|CALENDAR)/);
 });
 
+test("OAuth callbacks stay isolated to Preview and preserve the stable Production origin", async () => {
+  const [urls, meta, ga4, workspace, ui, example] = await Promise.all([
+    readFile(new URL("../lib/integration-urls.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/meta.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/ga4.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/google-workspace.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  assert.match(urls, /VERCEL_ENV === "preview"/);
+  assert.match(urls, /VERCEL_BRANCH_URL \|\| process\.env\.VERCEL_URL/);
+  assert.match(urls, /true-authentic-ai-operations\.allin1xtra\.chatgpt\.site/);
+  for (const provider of ["meta", "ga4", "gmail", "calendar"]) assert.match(`${meta}\n${ga4}\n${workspace}`, new RegExp(`integrationCallbackUrl\\(\"${provider}\"\\)`));
+  assert.match(ui, /OAuth callback:/);
+  for (const key of ["INTEGRATION_CALLBACK_ORIGIN", "INTEGRATION_DASHBOARD_URL"]) assert.match(example, new RegExp(`${key}=`));
+});
+
 test("generated media stays server-side and approval controls remain isolated", async () => {
   const [generation, media, ui] = await Promise.all([
     readFile(new URL("../app/api/media/generate/route.ts", import.meta.url), "utf8"),

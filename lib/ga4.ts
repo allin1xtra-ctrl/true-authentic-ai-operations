@@ -1,7 +1,8 @@
 import { ensureSchema, getStore } from "../db/store";
 import { decryptIntegrationSecret } from "./integration-secrets";
+import { integrationCallbackUrl } from "./integration-urls";
 
-export const GA4_REDIRECT_URI = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site/api/integrations/ga4/callback";
+export const GA4_REDIRECT_URI = integrationCallbackUrl("ga4");
 export const GA4_SCOPES = ["https://www.googleapis.com/auth/analytics.readonly"];
 
 export function ga4Config() {
@@ -23,16 +24,16 @@ export async function refreshGa4AccessToken(refreshToken: string) {
 }
 
 export async function verifyGa4Connection() {
-  if (!ga4Config().configured) return { status: "connection_required" as const, checkedAt: null, configured: false, message: "Google Analytics credentials are not configured." };
+  if (!ga4Config().configured) return { status: "connection_required" as const, checkedAt: null, configured: false, message: "Google Analytics credentials are not configured.", callbackUrl: GA4_REDIRECT_URI };
   try {
     const db = getStore(); await ensureSchema(db);
     const row = await db.prepare("SELECT encrypted_token,account_label FROM integration_connections WHERE provider='ga4' AND status='ready'").first<{ encrypted_token: string; account_label: string }>();
-    if (!row) return { status: "connection_required" as const, checkedAt: null, configured: true, message: "Complete Google Analytics authorization." };
+    if (!row) return { status: "connection_required" as const, checkedAt: null, configured: true, message: "Complete Google Analytics authorization.", callbackUrl: GA4_REDIRECT_URI };
     const stored = JSON.parse(await decryptIntegrationSecret(row.encrypted_token)) as { refreshToken?: string; propertyId?: string };
     if (!stored.refreshToken || !stored.propertyId) throw new Error("INVALID_GA4_CONNECTION");
     const accessToken = await refreshGa4AccessToken(stored.refreshToken);
     const response = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${encodeURIComponent(stored.propertyId)}:runReport`, { method: "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ dateRanges: [{ startDate: "7daysAgo", endDate: "today" }], metrics: [{ name: "activeUsers" }], limit: 1 }) });
     if (!response.ok) throw new Error("GA4_VALIDATION_FAILED");
-    return { status: "ready" as const, checkedAt: new Date().toISOString(), configured: true, message: `Connected to ${row.account_label}.` };
-  } catch { return { status: "error" as const, checkedAt: null, configured: true, message: "Google Analytics authorization needs attention." }; }
+    return { status: "ready" as const, checkedAt: new Date().toISOString(), configured: true, message: `Connected to ${row.account_label}.`, callbackUrl: GA4_REDIRECT_URI };
+  } catch { return { status: "error" as const, checkedAt: null, configured: true, message: "Google Analytics authorization needs attention.", callbackUrl: GA4_REDIRECT_URI }; }
 }

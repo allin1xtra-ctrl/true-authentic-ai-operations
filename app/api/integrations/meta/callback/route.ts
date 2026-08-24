@@ -1,8 +1,8 @@
 import { ensureSchema, getStore, id } from "../../../../../db/store";
 import { encryptMetaToken, META_REDIRECT_URI, META_SCOPES, metaConfig } from "../../../../../lib/meta";
+import { integrationDashboardUrl } from "../../../../../lib/integration-urls";
 
-const dashboard = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site/";
-function done(result: string) { const url = new URL(dashboard); url.searchParams.set("meta", result); url.hash = "settings"; return Response.redirect(url, 302); }
+function done(result: string) { const url = new URL(integrationDashboardUrl()); url.searchParams.set("meta", result); url.hash = "settings"; return Response.redirect(url, 302); }
 function hash(value: string) { return crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)).then((bytes) => Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("")); }
 
 export async function GET(request: Request) {

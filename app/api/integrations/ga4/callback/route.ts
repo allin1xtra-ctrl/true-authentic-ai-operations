@@ -1,9 +1,9 @@
 import { ensureSchema, getStore, id } from "../../../../../db/store";
 import { GA4_REDIRECT_URI, GA4_SCOPES, ga4Config } from "../../../../../lib/ga4";
 import { encryptIntegrationSecret } from "../../../../../lib/integration-secrets";
+import { integrationDashboardUrl } from "../../../../../lib/integration-urls";
 
-const dashboard = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site/";
-function done(result: string) { const url = new URL(dashboard); url.searchParams.set("ga4", result); url.hash = "settings"; return Response.redirect(url, 302); }
+function done(result: string) { const url = new URL(integrationDashboardUrl()); url.searchParams.set("ga4", result); url.hash = "settings"; return Response.redirect(url, 302); }
 async function hash(value: string) { const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)); return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join(""); }
 
 export async function GET(request: Request) {

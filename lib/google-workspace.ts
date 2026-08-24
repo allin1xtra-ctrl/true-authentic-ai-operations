@@ -1,15 +1,13 @@
 import { ensureSchema, getStore, id } from "../db/store";
 import { decryptIntegrationSecret, encryptIntegrationSecret } from "./integration-secrets";
+import { integrationCallbackUrl, integrationDashboardUrl } from "./integration-urls";
 
 export type GoogleWorkspaceProvider = "gmail" | "calendar";
-
-const DASHBOARD_URL = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site/";
-const CALLBACK_BASE = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site/api/integrations";
 
 const providers = {
   gmail: {
     scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
-    redirectUri: `${CALLBACK_BASE}/gmail/callback`,
+    redirectUri: integrationCallbackUrl("gmail"),
     integrationId: "gmail",
     integrationName: "Gmail",
     capabilities: "Read-only inbox search, threads, and support review",
@@ -20,7 +18,7 @@ const providers = {
       "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
       "https://www.googleapis.com/auth/calendar.events.readonly",
     ],
-    redirectUri: `${CALLBACK_BASE}/calendar/callback`,
+    redirectUri: integrationCallbackUrl("calendar"),
     integrationId: "scheduling",
     integrationName: "Google Calendar",
     capabilities: "Read-only calendar and event visibility for operational planning",
@@ -45,7 +43,7 @@ async function sha256(value: string) {
 }
 
 export function googleWorkspaceDoneUrl(provider: GoogleWorkspaceProvider, result: string) {
-  const url = new URL(DASHBOARD_URL);
+  const url = new URL(integrationDashboardUrl());
   url.searchParams.set(provider, result);
   url.hash = "settings";
   return url;
@@ -140,20 +138,20 @@ export async function completeGoogleWorkspaceAuthorization(provider: GoogleWorks
 
 export async function verifyGoogleWorkspaceConnection(provider: GoogleWorkspaceProvider) {
   const details = googleWorkspaceProvider(provider);
-  if (!googleWorkspaceConfig().configured) return { status: "connection_required" as const, checkedAt: null, configured: false, message: `${details.integrationName} OAuth credentials are not configured.` };
+  if (!googleWorkspaceConfig().configured) return { status: "connection_required" as const, checkedAt: null, configured: false, message: `${details.integrationName} OAuth credentials are not configured.`, callbackUrl: details.redirectUri };
   const checkedAt = new Date().toISOString();
   try {
     const db = getStore();
     await ensureSchema(db);
     const row = await db.prepare("SELECT encrypted_token,account_label FROM integration_connections WHERE provider=? AND status='ready'")
       .bind(provider).first<{ encrypted_token: string; account_label: string }>();
-    if (!row) return { status: "connection_required" as const, checkedAt: null, configured: true, message: `Complete ${details.integrationName} authorization.` };
+    if (!row) return { status: "connection_required" as const, checkedAt: null, configured: true, message: `Complete ${details.integrationName} authorization.`, callbackUrl: details.redirectUri };
     const stored = JSON.parse(await decryptIntegrationSecret(row.encrypted_token)) as { refreshToken?: string };
     if (!stored.refreshToken) throw new Error("INVALID_GOOGLE_WORKSPACE_CONNECTION");
     await validateProvider(provider, await refreshAccessToken(stored.refreshToken));
     await db.prepare("UPDATE integration_connections SET last_checked=? WHERE provider=?").bind(checkedAt, provider).run();
-    return { status: "ready" as const, checkedAt, configured: true, message: `Connected to ${row.account_label}.` };
+    return { status: "ready" as const, checkedAt, configured: true, message: `Connected to ${row.account_label}.`, callbackUrl: details.redirectUri };
   } catch {
-    return { status: "error" as const, checkedAt, configured: true, message: `${details.integrationName} authorization needs attention.` };
+    return { status: "error" as const, checkedAt, configured: true, message: `${details.integrationName} authorization needs attention.`, callbackUrl: details.redirectUri };
   }
 }
