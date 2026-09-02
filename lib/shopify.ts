@@ -7,6 +7,46 @@ export const SHOPIFY_CALLBACK = "https://true-authentic-ai-team-backend.vercel.a
 export const SHOPIFY_APP = "https://true-authentic-ai-team-backend.vercel.app";
 const ALLOWED_SCOPES = ["read_products", "read_inventory", "read_orders", "read_fulfillments"];
 
+const SHOPIFY_SNAPSHOT_QUERY = `query ClaudeShopifySnapshot {
+  shop {
+    name
+    myshopifyDomain
+    currencyCode
+  }
+  products(first: 20, sortKey: UPDATED_AT, reverse: true) {
+    nodes {
+      id
+      title
+      status
+      totalInventory
+      updatedAt
+      variants(first: 5) {
+        nodes {
+          id
+          sku
+          price
+          inventoryQuantity
+        }
+      }
+    }
+  }
+  orders(first: 10, sortKey: CREATED_AT, reverse: true) {
+    nodes {
+      id
+      name
+      createdAt
+      displayFinancialStatus
+      displayFulfillmentStatus
+      totalPriceSet {
+        shopMoney {
+          amount
+          currencyCode
+        }
+      }
+    }
+  }
+}`;
+
 export function normalizeShop(value: string) {
   const input = value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/$/, "");
   const shop = input.includes(".") ? input : `${input}.myshopify.com`;
@@ -81,4 +121,59 @@ export async function verifyShopifyConnection(shop = SHOPIFY_STORE) {
     await db.prepare("UPDATE integration_connections SET status='error',last_checked=? WHERE provider='shopify'").bind(checkedAt).run().catch(() => undefined);
     return { status: "error" as const, checkedAt, configured: true, message: "Shopify authorization exists, but read-only validation failed." };
   }
+}
+
+type ShopifySnapshotResponse = {
+  data?: {
+    shop?: { name?: string; myshopifyDomain?: string; currencyCode?: string };
+    products?: { nodes?: Array<{ id?: string; title?: string; status?: string; totalInventory?: number | null; updatedAt?: string; variants?: { nodes?: Array<{ id?: string; sku?: string | null; price?: string; inventoryQuantity?: number | null }> } }> };
+    orders?: { nodes?: Array<{ id?: string; name?: string; createdAt?: string; displayFinancialStatus?: string | null; displayFulfillmentStatus?: string | null; totalPriceSet?: { shopMoney?: { amount?: string; currencyCode?: string } } }> };
+  };
+  errors?: unknown;
+};
+
+export async function getShopifyReadContext(shop = SHOPIFY_STORE) {
+  const db = getStore();
+  await ensureSchema(db);
+  const connection = await db.prepare("SELECT account_label,encrypted_token FROM integration_connections WHERE provider='shopify' AND status='ready'")
+    .first<{ account_label: string; encrypted_token: string }>();
+  if (!connection || connection.account_label !== shop) throw new Error("SHOPIFY_CONNECTION_REQUIRED");
+
+  const token = await decryptIntegrationSecret(connection.encrypted_token);
+  const response = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-shopify-access-token": token },
+    body: JSON.stringify({ query: SHOPIFY_SNAPSHOT_QUERY }),
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => null) as ShopifySnapshotResponse | null;
+  if (!response.ok || body?.errors || body?.data?.shop?.myshopifyDomain !== shop) throw new Error("SHOPIFY_READ_FAILED");
+
+  return {
+    source: "shopify_admin_graphql",
+    access: "read_only",
+    checkedAt: new Date().toISOString(),
+    shop: {
+      name: body.data?.shop?.name || "True Authentic Apparel",
+      domain: body.data?.shop?.myshopifyDomain || shop,
+      currencyCode: body.data?.shop?.currencyCode || "USD",
+    },
+    products: (body.data?.products?.nodes || []).map((product) => ({
+      id: product.id,
+      title: product.title,
+      status: product.status,
+      totalInventory: product.totalInventory,
+      updatedAt: product.updatedAt,
+      variants: (product.variants?.nodes || []).map((variant) => ({ id: variant.id, sku: variant.sku, price: variant.price, inventoryQuantity: variant.inventoryQuantity })),
+    })),
+    recentOrders: (body.data?.orders?.nodes || []).map((order) => ({
+      id: order.id,
+      name: order.name,
+      createdAt: order.createdAt,
+      financialStatus: order.displayFinancialStatus,
+      fulfillmentStatus: order.displayFulfillmentStatus,
+      total: order.totalPriceSet?.shopMoney || null,
+    })),
+    privacy: "No customer names, emails, addresses, notes, or payment details are included.",
+  };
 }

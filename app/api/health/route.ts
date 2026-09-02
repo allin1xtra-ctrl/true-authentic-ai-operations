@@ -4,32 +4,13 @@ import { verifyMetaConnection } from "../../../lib/meta";
 import { verifyGa4Connection } from "../../../lib/ga4";
 import { verifyPostHogConnection } from "../../../lib/posthog";
 import { verifyRedis } from "../../../lib/redis";
+import { verifyAIProvider } from "../../../lib/ai";
 
 const SHOPIFY_BACKEND = "https://true-authentic-ai-team-backend.vercel.app";
 const SITES_ORIGIN = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site";
 const SHOPIFY_STORE = "2f1f04-9f.myshopify.com";
 
 type Status = "ready" | "working" | "awaiting_approval" | "connection_required" | "error";
-
-async function verifyAI(): Promise<{ status: Status; provider: string; checkedAt: string }> {
-  const checkedAt = new Date().toISOString();
-  const gatewayCredential = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
-  const provider = gatewayCredential ? "vercel_ai_gateway" : process.env.OPENAI_API_KEY ? "openai_api" : "none";
-  const credential = gatewayCredential || process.env.OPENAI_API_KEY;
-  if (!credential) return { status: "connection_required", provider, checkedAt };
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 7_000);
-  try {
-    const endpoint = gatewayCredential ? "https://ai-gateway.vercel.sh/v1/models" : "https://api.openai.com/v1/models";
-    const response = await fetch(endpoint, { headers: { authorization: `Bearer ${credential}` }, signal: controller.signal });
-    return { status: response.ok ? "ready" : "error", provider, checkedAt };
-  } catch {
-    return { status: "error", provider, checkedAt };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
 
 async function verifyShopify(): Promise<{ status: Status; checkedAt: string | null; configured: boolean; message?: string }> {
   const backend = process.env.SHOPIFY_BACKEND_URL?.trim().replace(/\/$/, "");
@@ -48,7 +29,7 @@ async function verifyShopify(): Promise<{ status: Status; checkedAt: string | nu
 export async function GET() {
   if (!await getChatGPTUser()) return Response.json({ success: false, error: "Authentication required" }, { status: 401 });
 
-  const ai = await verifyAI();
+  const ai = await verifyAIProvider();
   let database: { status: Status; checkedAt: string } = { status: "error", checkedAt: new Date().toISOString() };
   let pendingByAgent: Record<string, number> = {};
   try {
