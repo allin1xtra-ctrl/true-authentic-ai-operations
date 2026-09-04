@@ -15,11 +15,11 @@ const memories = [
 const integrations = [
   ["ai", "AI Engine", "connection_required", "AI connection required", "agent responses, daily brief"],
   ["shopify", "Shopify", "connection_required", "Connection required", "orders, products, fulfillment, sales"],
-  ["gmail", "Gmail", "connection_required", "Connection required", "search inbox, read threads, prepare drafts"],
+  ["gmail", "Gmail", "connection_required", "Connection required", "read-only inbox search, threads, and support review"],
   ["meta", "Meta", "connection_required", "Connection required", "Facebook Page and Instagram account discovery"],
   ["ga4", "Google Analytics 4", "connection_required", "Connection required", "read-only traffic, engagement, acquisition, and conversion reporting"],
   ["posthog", "PostHog", "connection_required", "Connection required", "read-only product analytics, funnels, paths, and retention"],
-  ["scheduling", "Scheduling", "connection_required", "Connection required", "daily command brief"],
+  ["scheduling", "Google Calendar", "connection_required", "Connection required", "read-only calendar and event visibility for operational planning"],
 ];
 
 const agentIds = new Set(["monroe", "sage", "cleo", "lennox", "avery"]);
@@ -34,17 +34,10 @@ async function seed() {
       "INSERT INTO memories (id, category, content, approved, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)"
     ).bind(id("mem"), category, content, now, now)));
   }
-  const integrationCount = await db.prepare("SELECT COUNT(*) AS count FROM integrations").first<{ count: number }>();
-  if (!integrationCount?.count) {
-    await db.batch(integrations.map(([key, name, status, explanation, capabilities]) => db.prepare(
-      "INSERT INTO integrations (id, name, status, explanation, capabilities, last_checked) VALUES (?, ?, ?, ?, ?, ?)"
-    ).bind(key, name, status, explanation, capabilities, now)));
-  }
+  await db.batch(integrations.map(([key, name, status, explanation, capabilities]) => db.prepare(
+    "INSERT INTO integrations (id,name,status,explanation,capabilities,last_checked) VALUES (?,?,?,?,?,NULL) ON CONFLICT(id) DO UPDATE SET name=excluded.name,capabilities=excluded.capabilities"
+  ).bind(key, name, status, explanation, capabilities)));
   // No adapter may claim a live connection until it has a successful server-side check.
-  await db.prepare("INSERT INTO integrations (id,name,status,explanation,capabilities,last_checked) VALUES ('meta','Meta','connection_required','Connection required','Facebook Page and Instagram account discovery',NULL) ON CONFLICT(id) DO NOTHING").run();
-  await db.prepare("INSERT INTO integrations (id,name,status,explanation,capabilities,last_checked) VALUES ('ga4','Google Analytics 4','connection_required','Connection required','read-only traffic, engagement, acquisition, and conversion reporting',NULL) ON CONFLICT(id) DO NOTHING").run();
-  await db.prepare("INSERT INTO integrations (id,name,status,explanation,capabilities,last_checked) VALUES ('posthog','PostHog','connection_required','Connection required','read-only product analytics, funnels, paths, and retention',NULL) ON CONFLICT(id) DO NOTHING").run();
-  await db.prepare("UPDATE integrations SET status='connection_required', explanation='Connection required', last_checked=NULL WHERE id IN ('ai','shopify','gmail','scheduling')").run();
   await db.prepare("UPDATE approvals SET execution_result='Approved. No external action executed because no verified execution adapter is attached to this proposal.' WHERE status='approved' AND execution_result IS NULL").run();
   await db.prepare("UPDATE approvals SET execution_result='Rejected. No external action executed.' WHERE status='rejected' AND execution_result IS NULL").run();
   await db.prepare("UPDATE conversations SET status='ready' WHERE status='awaiting_approval' AND agent_id NOT IN (SELECT agent_id FROM approvals WHERE status='pending')").run();

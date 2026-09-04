@@ -1,7 +1,8 @@
 import { ensureSchema, getStore } from "../db/store";
 import { decryptIntegrationSecret, encryptIntegrationSecret } from "./integration-secrets";
+import { integrationCallbackUrl } from "./integration-urls";
 
-export const META_REDIRECT_URI = "https://true-authentic-ai-operations.allin1xtra.chatgpt.site/api/integrations/meta/callback";
+export const META_REDIRECT_URI = integrationCallbackUrl("meta");
 export const META_SCOPES = ["pages_show_list", "pages_read_engagement", "instagram_basic"];
 
 function config() {
@@ -19,11 +20,11 @@ export function metaConfig() { return config(); }
 
 export async function verifyMetaConnection() {
   const configured = config().configured;
-  if (!configured) return { status: "connection_required" as const, checkedAt: null, configured: false, message: "Meta developer credentials are not configured." };
+  if (!configured) return { status: "connection_required" as const, checkedAt: null, configured: false, message: "Meta developer credentials are not configured.", callbackUrl: META_REDIRECT_URI };
   try {
     const db = getStore(); await ensureSchema(db);
     const row = await db.prepare("SELECT encrypted_token,account_label FROM integration_connections WHERE provider='meta' AND status='ready'").first<{ encrypted_token: string; account_label: string }>();
-    if (!row) return { status: "connection_required" as const, checkedAt: null, configured: true, message: "Complete Meta authorization." };
+    if (!row) return { status: "connection_required" as const, checkedAt: null, configured: true, message: "Complete Meta authorization.", callbackUrl: META_REDIRECT_URI };
     const stored = JSON.parse(await decryptMetaToken(row.encrypted_token)) as { pageId?: string; pageToken?: string; instagramId?: string; scopes?: string[] };
     if (!stored.pageId || !stored.pageToken) throw new Error("INVALID_META_CONNECTION");
     const { version } = config();
@@ -33,8 +34,8 @@ export async function verifyMetaConnection() {
     if (!response.ok) throw new Error("META_VALIDATION_FAILED");
     const body = await response.json() as { id?: string };
     if (!body.id) throw new Error("META_VALIDATION_FAILED");
-    return { status: "ready" as const, checkedAt: new Date().toISOString(), configured: true, message: `Connected to ${row.account_label}.` };
+    return { status: "ready" as const, checkedAt: new Date().toISOString(), configured: true, message: `Connected to ${row.account_label}.`, callbackUrl: META_REDIRECT_URI };
   } catch {
-    return { status: "error" as const, checkedAt: null, configured: true, message: "Meta authorization needs attention." };
+    return { status: "error" as const, checkedAt: null, configured: true, message: "Meta authorization needs attention.", callbackUrl: META_REDIRECT_URI };
   }
 }
