@@ -278,3 +278,29 @@ test("automation API requires identity or the protected scheduler secret", async
   assert.match(route, /isSafeScheduledInstruction/);
   assert.doesNotMatch(route, /NEXT_PUBLIC_.*SECRET/);
 });
+
+test("Gmail and Calendar OAuth are state-protected, encrypted, read-only, and live-validated", async () => {
+  const [ui, health, gmailStart, gmailCallback, gmail, calendarStart, calendarCallback, calendar, example] = await Promise.all([
+    readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/integrations/gmail/start/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/integrations/gmail/callback/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/gmail.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/integrations/calendar/start/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/integrations/calendar/callback/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/calendar.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  for (const start of [gmailStart, calendarStart]) { assert.match(start, /crypto\.randomUUID/); assert.match(start, /getChatGPTUser/); }
+  for (const callback of [gmailCallback, calendarCallback]) {
+    assert.match(callback, /used_at IS NULL/);
+    assert.match(callback, /encryptIntegrationSecret/);
+  }
+  assert.match(gmail, /gmail\.readonly/);
+  assert.match(calendar, /calendar\.readonly/);
+  assert.match(health, /verifyGmailConnection/);
+  assert.match(health, /verifyCalendarConnection/);
+  assert.match(ui, /api\/integrations\/\$\{kind\}\/start/);
+  for (const key of ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "CALENDAR_CLIENT_ID", "CALENDAR_CLIENT_SECRET"]) assert.match(example, new RegExp(`${key}=`));
+  assert.doesNotMatch(`${ui}\n${gmailStart}\n${gmailCallback}\n${calendarStart}\n${calendarCallback}`, /NEXT_PUBLIC_.*(?:GMAIL|CALENDAR)/);
+});
