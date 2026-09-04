@@ -9,7 +9,7 @@ type EmployeeStatus = "ready" | "working" | "awaiting_approval" | "connection_re
 type Health = {
   success: boolean;
   checkedAt?: string;
-  ai: { status: EmployeeStatus; provider: string; checkedAt: string };
+  ai: { status: EmployeeStatus; provider: string; model: string; transport: string; checkedAt: string };
   database: { status: EmployeeStatus; checkedAt: string };
   integrations: Record<string, { status: EmployeeStatus; checkedAt: string | null; configured?: boolean; message?: string; callbackUrl?: string }>;
   employees: Record<string, { status: EmployeeStatus; requiredIntegration: string | null; pendingApprovals: number }>;
@@ -19,12 +19,12 @@ const agents: Agent[] = [
   { id: "monroe", name: "Monroe", role: "Business Manager", initials: "MO", image: "/agents/monroe.webp", accent: "#9f3548", capabilities: ["Daily priorities", "Business reporting", "Supplier comparison"], tools: ["Business memory", "Tasks"] },
   { id: "sage", name: "Sage", role: "Social Media Manager", initials: "SA", image: "/agents/sage.webp", accent: "#74604c", capabilities: ["Content calendar", "Campaign planning", "Social analytics"], tools: ["Direct social channels", "Approvals"] },
   { id: "cleo", name: "Cleo", role: "Customer Experience", initials: "CL", image: "/agents/cleo.webp", accent: "#8a5369", capabilities: ["Inbox review", "Support drafts", "Order communication"], tools: ["Gmail (connection required)", "Approvals"] },
-  { id: "lennox", name: "Lennox", role: "Commerce Manager", initials: "LE", image: "/agents/lennox.webp", accent: "#6f2434", capabilities: ["Shopify orders", "Product monitoring", "Conversion analysis"], tools: ["Shopify (connection required)", "Approvals"] },
+  { id: "lennox", name: "Lennox", role: "Commerce Manager", initials: "LE", image: "/agents/lennox.webp", accent: "#6f2434", capabilities: ["Shopify orders", "Product monitoring", "Conversion analysis"], tools: ["Shopify read-only", "Approvals"] },
   { id: "avery", name: "Avery", role: "Product & Drop Manager", initials: "AV", image: "/agents/avery.webp", accent: "#4b5963", capabilities: ["Drop planning", "Tech packs", "Production milestones"], tools: ["Product memory", "Tasks"] },
 ];
 
 const empty: Data = { tasks: [], memories: [], approvals: [], integrations: [], activity: [], conversations: [], attachments: [], generations: [], schedules: [], runs: [], inbox: [] };
-const emptyHealth: Health = { success: false, ai: { status: "connection_required", provider: "none", checkedAt: "" }, database: { status: "error", checkedAt: "" }, integrations: {}, employees: {} };
+const emptyHealth: Health = { success: false, ai: { status: "connection_required", provider: "claude", model: "claude-sonnet-5", transport: "none", checkedAt: "" }, database: { status: "error", checkedAt: "" }, integrations: {}, employees: {} };
 const generationPromptLimit = 2000;
 
 async function readApiResponse(response: Response, fallback: string) {

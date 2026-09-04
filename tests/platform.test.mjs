@@ -72,21 +72,29 @@ test("employee readiness is live, integration-specific, and approval-backed", as
 });
 
 test("private credentials stay server-only and provider failures are sanitized", async () => {
-  const [agent, health, example] = await Promise.all([
+  const [agent, health, ai, example] = await Promise.all([
     readFile(new URL("../app/api/agent/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/ai.ts", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
   ]);
-  assert.doesNotMatch(`${agent}\n${health}`, /NEXT_PUBLIC_.*(?:KEY|TOKEN|SECRET)/);
+  assert.doesNotMatch(`${agent}\n${health}\n${ai}`, /NEXT_PUBLIC_.*(?:KEY|TOKEN|SECRET)/);
   assert.match(agent, /AI service unavailable/);
   assert.match(agent, /AI_EMPTY_RESPONSE/);
+  assert.match(ai, /api\.anthropic\.com\/v1\/messages/);
+  assert.match(ai, /anthropic\/claude-sonnet-5/);
+  assert.match(ai, /openai\/gpt-5\.6-sol/);
+  assert.match(ai, /x-api-key/);
+  assert.match(example, /AI_PROVIDER=claude/);
+  assert.match(example, /ANTHROPIC_API_KEY=/);
   assert.match(example, /OPENAI_API_KEY=/);
   assert.doesNotMatch(example, /sk-[A-Za-z0-9]/);
 });
 
 test("Shopify OAuth is delegated to a state-protected, encrypted, read-only backend", async () => {
-  const [ui, connect, health, start, callback, status, shopify, example] = await Promise.all([
+  const [ui, agent, connect, health, start, callback, status, shopify, example] = await Promise.all([
     readFile(new URL("../app/OperationsPlatform.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/agent/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/integrations/shopify/connect/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/shopify/oauth/start/route.ts", import.meta.url), "utf8"),
@@ -107,6 +115,10 @@ test("Shopify OAuth is delegated to a state-protected, encrypted, read-only back
   assert.match(shopify, /encryptIntegrationSecret/);
   assert.match(shopify, /decryptIntegrationSecret/);
   assert.match(shopify, /graphql\.json/);
+  assert.match(shopify, /ClaudeShopifySnapshot/);
+  assert.match(shopify, /access: "read_only"/);
+  assert.match(shopify, /No customer names, emails, addresses, notes, or payment details/);
+  assert.match(agent, /getShopifyReadContext/);
   assert.match(shopify, /2f1f04-9f\.myshopify\.com/);
   assert.doesNotMatch(`${ui}\n${health}\n${shopify}`, /true-authentic-apparel(?:-store)?\.myshopify\.com/);
   assert.doesNotMatch(shopify, /write_/);
